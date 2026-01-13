@@ -3,7 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Invoice, InvoiceStatus } from '../types';
 import { StorageService } from '../services/storage';
 import { GeminiService } from '../services/geminiService';
-import { DollarSign, TrendingUp, Package, AlertCircle, Sparkles, Settings } from 'lucide-react';
+import { DollarSign, TrendingUp, Package, AlertCircle, Sparkles, Settings, X } from 'lucide-react';
 import { Button } from './Button';
 
 export const Dashboard: React.FC = () => {
@@ -13,12 +13,18 @@ export const Dashboard: React.FC = () => {
   const [geminiAnalysis, setGeminiAnalysis] = useState<string>('');
   const [loadingAi, setLoadingAi] = useState(false);
 
+  // State for Settings Modal
+  const [editModal, setEditModal] = useState<{ type: 'rate' | 'price'; value: string } | null>(null);
+  const [isSavingSetting, setIsSavingSetting] = useState(false);
+
+  // Helper to load all data from storage
+  const loadSettings = () => {
+      setInvoices(StorageService.getInvoices());
+      setExchangeRate(StorageService.getExchangeRate());
+      setPricePerKg(StorageService.getPricePerKg());
+  };
+
   useEffect(() => {
-    const loadSettings = () => {
-        setInvoices(StorageService.getInvoices());
-        setExchangeRate(StorageService.getExchangeRate());
-        setPricePerKg(StorageService.getPricePerKg());
-    };
     loadSettings();
     const unsubscribe = StorageService.subscribe(loadSettings);
     return () => unsubscribe();
@@ -32,7 +38,6 @@ export const Dashboard: React.FC = () => {
 
     invoices.forEach(inv => {
       // Per prompt requirement: "Cálculo de ganancia neta: (precio con descuento - precio original + comisión)"
-      // This implies: (Selling Price - Sourcing Price) + Commissions
       // Note: Excluding logistics from this specific calculation as per "Excluir precio logística"
       
       const invItems = inv.items || [];
@@ -76,22 +81,49 @@ export const Dashboard: React.FC = () => {
     setLoadingAi(false);
   };
 
-  const handleRateUpdate = () => {
-    const newRate = prompt("Ingrese nueva tasa USD/Bs:", exchangeRate.toString());
-    if (newRate && !isNaN(parseFloat(newRate))) {
-        StorageService.setExchangeRate(parseFloat(newRate));
-    }
-  }
+  // --- Modal Handlers ---
 
-  const handlePricePerKgUpdate = () => {
-    const newPrice = prompt("Ingrese nuevo precio de envío por Kg ($):", pricePerKg.toString());
-    if (newPrice && !isNaN(parseFloat(newPrice))) {
-        StorageService.setPricePerKg(parseFloat(newPrice));
+  const openRateModal = () => {
+    setEditModal({ type: 'rate', value: (exchangeRate || 0).toString() });
+  };
+
+  const openPriceModal = () => {
+    setEditModal({ type: 'price', value: (pricePerKg || 0).toString() });
+  };
+
+  const handleSaveSetting = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editModal) return;
+
+    // Flexible parsing for commas or dots
+    const cleanVal = editModal.value.replace(',', '.');
+    const num = parseFloat(cleanVal);
+
+    if (isNaN(num) || num < 0) {
+        alert("Por favor ingrese un número válido.");
+        return;
     }
-  }
+
+    setIsSavingSetting(true);
+    
+    try {
+        if (editModal.type === 'rate') {
+            await StorageService.setExchangeRate(num);
+        } else {
+            await StorageService.setPricePerKg(num);
+        }
+        loadSettings(); // Refresh UI immediately
+        setEditModal(null);
+    } catch (error) {
+        console.error("Error saving setting:", error);
+        alert("No se pudo guardar la configuración. Intente nuevamente.");
+    } finally {
+        setIsSavingSetting(false);
+    }
+  };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
            <h2 className="text-2xl font-bold text-slate-800">Resumen Financiero</h2>
@@ -105,8 +137,8 @@ export const Dashboard: React.FC = () => {
                     <span className="text-[10px] uppercase font-bold text-slate-400">Tasa Cambio</span>
                     <span className="text-sm font-bold text-emerald-600">{(exchangeRate || 0).toFixed(2)} Bs</span>
                 </div>
-                <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={handleRateUpdate}>
-                    <Settings size={14} />
+                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-500 hover:text-indigo-600" onClick={openRateModal}>
+                    <Settings size={16} />
                 </Button>
             </div>
 
@@ -115,8 +147,8 @@ export const Dashboard: React.FC = () => {
                     <span className="text-[10px] uppercase font-bold text-slate-400">Envío / Kg</span>
                     <span className="text-sm font-bold text-indigo-600">${(pricePerKg || 0).toFixed(2)}</span>
                 </div>
-                <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={handlePricePerKgUpdate}>
-                    <Settings size={14} />
+                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-500 hover:text-indigo-600" onClick={openPriceModal}>
+                    <Settings size={16} />
                 </Button>
             </div>
         </div>
@@ -171,6 +203,54 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Settings Modal */}
+      {editModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <h3 className="font-bold text-slate-800">
+                        {editModal.type === 'rate' ? 'Actualizar Tasa (Bs/USD)' : 'Actualizar Precio Envío ($/Kg)'}
+                    </h3>
+                    <button onClick={() => setEditModal(null)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                        <X size={20} />
+                    </button>
+                </div>
+                <form onSubmit={handleSaveSetting} className="p-6">
+                    <div className="mb-6">
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                            {editModal.type === 'rate' ? 'Nueva Tasa del Día' : 'Nuevo Costo por Kg'}
+                        </label>
+                        <div className="relative">
+                            <input 
+                                type="text"
+                                inputMode="decimal" 
+                                className="w-full rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 border p-3 text-lg font-mono text-center"
+                                value={editModal.value}
+                                onChange={(e) => setEditModal({ ...editModal, value: e.target.value })}
+                                placeholder="0.00"
+                                autoFocus
+                            />
+                            <div className="absolute right-3 top-3 text-slate-400 text-sm font-medium pointer-events-none">
+                                {editModal.type === 'rate' ? 'Bs' : 'USD'}
+                            </div>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-2 text-center">
+                            Puede usar punto (.) o coma (,) para decimales.
+                        </p>
+                    </div>
+                    <div className="flex justify-end gap-3">
+                        <Button type="button" variant="secondary" onClick={() => setEditModal(null)} disabled={isSavingSetting}>
+                            Cancelar
+                        </Button>
+                        <Button type="submit" isLoading={isSavingSetting}>
+                            Guardar Cambios
+                        </Button>
+                    </div>
+                </form>
+            </div>
+        </div>
+      )}
     </div>
   );
 };

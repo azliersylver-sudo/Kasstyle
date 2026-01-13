@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Invoice, InvoiceStatus, ProductItem, Platform, Client } from '../types';
 import { StorageService } from '../services/storage';
 import { Button } from './Button';
-import { Trash2, Plus, ArrowLeft, Wand2, Calculator } from 'lucide-react';
+import { Trash2, Plus, ArrowLeft, Wand2 } from 'lucide-react';
 import { GeminiService } from '../services/geminiService';
 
 interface InvoiceFormProps {
@@ -21,7 +21,13 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
   const [logisticsCost, setLogisticsCost] = useState(0);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [configPricePerKg, setConfigPricePerKg] = useState(15.43);
+  
+  const [isSaving, setIsSaving] = useState(false);
+  
+  // Ref to track if the initial data has been loaded.
+  const isLoadedRef = useRef(false);
 
+  // Load Data
   useEffect(() => {
     setClients(StorageService.getClients());
     const currentRate = StorageService.getExchangeRate();
@@ -34,8 +40,30 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
         setClientId(inv.clientId || '');
         setStatus(inv.status || InvoiceStatus.DRAFT);
         setExchangeRate(typeof inv.exchangeRate === 'number' ? inv.exchangeRate : currentRate);
-        setItems(inv.items || []);
-        setLogisticsCost(inv.logisticsCost || 0);
+        
+        const loadedItems = inv.items || [];
+        setItems(loadedItems);
+        
+        // CRITICAL: Load saved cost OR Self-Heal if 0
+        let loadedCost = inv.logisticsCost !== undefined ? inv.logisticsCost : 0;
+        
+        // If cost is 0 but we have items, it's likely a data error or fresh calculation needed.
+        // Recalculate immediately to fix display.
+        if (loadedCost === 0 && loadedItems.length > 0) {
+             const totalKg = loadedItems.reduce((acc, item) => {
+                const itemWeight = item.weight || 0;
+                const itemQty = item.quantity || 0;
+                const weightInKg = item.weightUnit === 'lb' ? (itemWeight / 2.20462) : itemWeight;
+                return acc + (weightInKg * itemQty);
+            }, 0);
+            
+            if (totalKg > 0) {
+                loadedCost = parseFloat((totalKg * currentPricePerKg).toFixed(2));
+            }
+        }
+
+        setLogisticsCost(loadedCost);
+        
         try {
             setDate(new Date(inv.createdAt).toISOString().split('T')[0]);
         } catch(e) {
@@ -44,23 +72,40 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
       }
     } else {
       setExchangeRate(currentRate);
+      setLogisticsCost(0);
     }
+    
+    // Mark as loaded after a brief tick
+    setTimeout(() => {
+        isLoadedRef.current = true;
+    }, 100);
   }, [invoiceId]);
 
-  // Effect to auto-calculate logistics when weight/items change
-  // Rule: Convert everything to KG first. 1 KG = 2.20462 LB.
+  // Calculation Logic
   const calculateSuggestedLogistics = (currentItems: ProductItem[]) => {
     const totalKg = currentItems.reduce((acc, item) => {
         const itemWeight = item.weight || 0;
         const itemQty = item.quantity || 0;
-        // Convert to KG if LB, otherwise use as is
+        // Convert to KG if LB
         const weightInKg = item.weightUnit === 'lb' ? (itemWeight / 2.20462) : itemWeight;
         return acc + (weightInKg * itemQty);
     }, 0);
 
     const pricePerKg = configPricePerKg;
-    return parseFloat((totalKg * pricePerKg).toFixed(2));
+    return {
+        cost: parseFloat((totalKg * pricePerKg).toFixed(2)),
+        totalWeight: parseFloat(totalKg.toFixed(2))
+    };
   };
+
+  // Auto-calculate logistics strictly when items or config changes, 
+  // BUT ONLY AFTER INITIAL LOAD
+  useEffect(() => {
+     if (!isLoadedRef.current && invoiceId) return;
+
+     const result = calculateSuggestedLogistics(items);
+     setLogisticsCost(result.cost);
+  }, [items, configPricePerKg]);
 
   const addItem = () => {
     const newItem: ProductItem = {
@@ -68,7 +113,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
       name: '',
       quantity: 1,
       weight: 0,
-      weightUnit: 'lb', // Default unit
+      weightUnit: 'lb',
       platform: Platform.SHEIN,
       originalPrice: 0,
       finalPrice: 0,
@@ -81,17 +126,11 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
   const updateItem = (id: string, field: keyof ProductItem, value: any) => {
     const newItems = items.map(item => item.id === id ? { ...item, [field]: value } : item);
     setItems(newItems);
-    
-    // Auto-update logistics if weight, unit or quantity changes
-    if (field === 'weight' || field === 'quantity' || field === 'weightUnit') {
-        setLogisticsCost(calculateSuggestedLogistics(newItems));
-    }
   };
 
   const removeItem = (id: string) => {
     const newItems = items.filter(item => item.id !== id);
     setItems(newItems);
-    setLogisticsCost(calculateSuggestedLogistics(newItems));
   };
 
   const handleAiDescription = async (id: string, name: string) => {
@@ -100,13 +139,14 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
     if (desc) updateItem(id, 'name', desc);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!clientId) {
       alert("Seleccione un cliente");
       return;
     }
     
-    // Calculations performed in StorageService, but we pass raw data
+    setIsSaving(true);
+
     const invoice: Invoice = {
       id: invoiceId || crypto.randomUUID(),
       clientId,
@@ -115,14 +155,15 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
       status,
       exchangeRate,
       items,
-      logisticsCost,
-      totalProductCost: 0, // Calculated in service
-      totalProductSale: 0, // Calculated in service
-      totalCommissions: 0, // Calculated in service
-      grandTotalUsd: 0     // Calculated in service
+      logisticsCost: logisticsCost, 
+      totalProductCost: 0, 
+      totalProductSale: 0, 
+      totalCommissions: 0, 
+      grandTotalUsd: 0     
     };
 
-    StorageService.saveInvoice(invoice);
+    await StorageService.saveInvoice(invoice);
+    setIsSaving(false);
     onClose();
   };
 
@@ -132,8 +173,8 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
   const grandTotalUSD = totalProductsUSD + (logisticsCost || 0);
   const grandTotalBs = grandTotalUSD * (exchangeRate || 0);
   
-  // Per prompt: Net Profit = (Discounted Price - Original Price) + Commission
   const estimatedProfit = items.reduce((acc, i) => acc + (((i.finalPrice || 0) - (i.originalPrice || 0)) + (i.commission || 0)) * (i.quantity || 0), 0);
+  const currentTotalWeight = calculateSuggestedLogistics(items).totalWeight;
 
   return (
     <div className="bg-white min-h-screen sm:min-h-0 sm:rounded-lg shadow-xl flex flex-col h-full">
@@ -148,8 +189,10 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
             </h2>
         </div>
         <div className="flex gap-2">
-            <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-            <Button onClick={handleSave}>Guardar</Button>
+            <Button variant="secondary" onClick={onClose} disabled={isSaving}>Cancelar</Button>
+            <Button onClick={handleSave} isLoading={isSaving}>
+                {isSaving ? 'Guardando...' : 'Guardar'}
+            </Button>
         </div>
       </div>
 
@@ -332,16 +375,20 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                         <span className="font-medium">${totalProductsUSD.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
-                         <span className="text-slate-500 flex items-center gap-2">
-                            Costo Logística (Auto Calc. ${configPricePerKg}/kg)
+                         <div className="text-slate-500 flex flex-col">
+                            <span className="flex items-center gap-1">
+                                Costo Logística (${configPricePerKg}/kg)
+                            </span>
+                            <span className="text-xs text-slate-400">Total Peso: {currentTotalWeight} kg</span>
+                         </div>
+                         <div className="flex items-center">
                             <input 
                                 type="number" 
-                                className="w-20 text-right p-1 border rounded text-xs bg-white" 
+                                className="w-24 text-right p-1 border rounded text-xs bg-slate-200 text-slate-500 cursor-not-allowed font-semibold" 
                                 value={logisticsCost}
-                                onChange={e => setLogisticsCost(parseFloat(e.target.value) || 0)}
+                                readOnly
                             />
-                         </span>
-                         <span className="font-medium">${logisticsCost.toFixed(2)}</span>
+                         </div>
                     </div>
                     <div className="flex justify-between text-xs text-slate-400">
                         <span>Comisiones Internas (Oculto al cliente):</span>

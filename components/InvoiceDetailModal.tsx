@@ -12,13 +12,16 @@ interface InvoiceDetailModalProps {
 export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice, client, onClose }) => {
   const [currency, setCurrency] = useState<'USD' | 'Bs'>('USD');
 
-  // Logic: Logistics = Shipping Cost (from DB or calc) + Commissions
-  // Note: The prompt asks for logistics to be "sum of shipping price + commission"
-  // The 'logisticsCost' field in DB represents the Shipping Cost.
-  // The 'totalCommissions' field is calculated from items.
+  // Calculate logic locally to guarantee consistency with what is shown in the table
+  // This prevents issues where the header "Total" is 0 but items have prices.
+  const subTotalProducts = (invoice.items || []).reduce((acc, item) => acc + ((item.finalPrice || 0) * (item.quantity || 0)), 0);
+  const totalCommissions = (invoice.items || []).reduce((acc, item) => acc + ((item.commission || 0) * (item.quantity || 0)), 0);
+  
   const shippingCost = invoice.logisticsCost || 0;
-  const totalCommissions = invoice.totalCommissions || 0;
+  // Note: The prompt asks for logistics to be "sum of shipping price + commission"
   const displayLogistics = shippingCost + totalCommissions;
+  
+  const grandTotal = subTotalProducts + displayLogistics;
 
   // Toggle Display Logic
   const rate = invoice.exchangeRate || 1;
@@ -103,7 +106,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
           <div class="totals">
             <div class="row">
               <span>Subtotal Productos:</span>
-              <span>${formatPrice(invoice.totalProductSale)}</span>
+              <span>${formatPrice(subTotalProducts)}</span>
             </div>
             <div class="row">
               <span>Logística y Manejo:</span>
@@ -111,9 +114,9 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
             </div>
             <div class="row grand-total">
               <span>TOTAL ${currency}:</span>
-              <span>${formatPrice(invoice.totalProductSale + displayLogistics)}</span>
+              <span>${formatPrice(grandTotal)}</span>
             </div>
-            ${!isBs ? `<div class="row" style="color: #666; font-size: 12px; margin-top:5px;">Ref. Bs: ${formatPrice(invoice.totalProductSale + displayLogistics).replace('$', 'Bs ')} (Tasa: ${rate})</div>` : ''}
+            ${!isBs ? `<div class="row" style="color: #666; font-size: 12px; margin-top:5px;">Ref. Bs: ${formatPrice(grandTotal).replace('$', 'Bs ')} (Tasa: ${rate})</div>` : ''}
           </div>
 
           <div style="clear: both;"></div>
@@ -203,7 +206,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
              <div className="w-full sm:w-1/2 bg-white rounded-lg shadow-sm border border-slate-200 p-4 space-y-3 cursor-pointer hover:border-indigo-300 transition-colors" onClick={toggleCurrency} title="Clic para cambiar moneda">
                 <div className="flex justify-between text-sm text-slate-500">
                     <span>Subtotal Productos</span>
-                    <span>{formatPrice(invoice.totalProductSale)}</span>
+                    <span>{formatPrice(subTotalProducts)}</span>
                 </div>
                 <div className="flex justify-between text-sm text-slate-500">
                     <span>Logística y Manejo</span>
@@ -212,7 +215,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
                 <div className="border-t border-slate-100 pt-3 flex justify-between items-center">
                     <div>
                         <span className="block text-xs text-slate-400">Total General</span>
-                        <span className="font-bold text-xl text-indigo-700">{formatPrice(invoice.totalProductSale + displayLogistics)}</span>
+                        <span className="font-bold text-xl text-indigo-700">{formatPrice(grandTotal)}</span>
                     </div>
                     {isBs && (
                          <div className="text-right">

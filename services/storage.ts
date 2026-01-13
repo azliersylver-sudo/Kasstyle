@@ -1,16 +1,27 @@
-import { Client, Invoice, InvoiceStatus, ProductItem, Platform } from '../types';
-
-// Keys for LocalStorage (Still used for cache/offline)
-const CLIENTS_KEY = 'veneorders_clients';
-const INVOICES_KEY = 'veneorders_invoices';
-const SETTINGS_KEY = 'veneorders_settings';
+import { Client, Invoice, InvoiceStatus, ProductItem } from '../types';
 
 // TU URL DE GOOGLE APPS SCRIPT
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwVGUKUtZu-MSz1q2eBm5s0do8m6KtNsZy2v_TF3z5kZKz4EqkSxNjikn9Ckpn5x8e8EQ/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxIRSEi8RsnQqD8kvbkZ3lYMDTx-HNc6PTVokC3Q8ld2LdFxLgAG2BSGT2ZjAw3Pd0SYw/exec';
 
 const DEFAULT_SETTINGS = { exchangeRate: 40.5, pricePerKg: 15.43 };
 
-// Observer Pattern for real-time UI updates
+// --- Helper: Safe Float Parsing (Handles "15,50" and "15.50") ---
+const safeParseFloat = (val: any): number => {
+  if (typeof val === 'number') return val;
+  if (val === undefined || val === null || val === '') return 0;
+  
+  // Convert to string and handle Spanish/European comma format
+  const str = String(val).replace(',', '.');
+  const num = parseFloat(str);
+  return isNaN(num) ? 0 : num;
+};
+
+// --- In-Memory State ---
+let _clients: Client[] = [];
+let _invoices: Invoice[] = [];
+let _settings = { ...DEFAULT_SETTINGS };
+
+// Observer Pattern
 type Listener = () => void;
 let listeners: Listener[] = [];
 
@@ -18,49 +29,27 @@ const notifyListeners = () => {
   listeners.forEach(l => l());
 };
 
-// Internal Helper: Local Storage (Cache)
-const getLocal = <T>(key: string, seed: T): T => {
-  const data = localStorage.getItem(key);
-  if (!data) return seed;
-  try {
-    const parsed = JSON.parse(data);
-    // Merge objects but not arrays
-    if (typeof seed === 'object' && seed !== null && !Array.isArray(seed)) {
-        return { ...seed, ...parsed };
-    }
-    return parsed;
-  } catch (e) {
-    return seed;
-  }
-};
-
-const setLocal = <T>(key: string, data: T) => {
-  localStorage.setItem(key, JSON.stringify(data));
-};
-
-// Internal Helper: Cloud Sync
-const syncToCloud = async () => {
-  const data = {
-    clients: getLocal(CLIENTS_KEY, []),
-    invoices: getLocal(INVOICES_KEY, [])
+const pushToCloud = async () => {
+  const payload = {
+    clients: _clients,
+    invoices: _invoices,
+    settings: _settings
   };
 
   try {
-    // We use text/plain to avoid CORS preflight OPTIONS request which GAS fails to handle
     await fetch(SCRIPT_URL, {
       method: 'POST',
       mode: 'no-cors', 
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify(data)
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     });
-    console.log('✅ Datos sincronizados con Google Sheet');
+    console.log('☁️ Sincronizado con Google Sheet');
   } catch (error) {
-    console.error('❌ Error sincronizando con Google Sheet:', error);
+    console.error('❌ Error guardando en nube:', error);
   }
 };
 
 export const StorageService = {
-  // Suscribe components to data changes
   subscribe: (listener: Listener) => {
     listeners.push(listener);
     return () => {
@@ -68,135 +57,137 @@ export const StorageService = {
     };
   },
 
-  // Initialize: Load from Cloud
   init: async () => {
     try {
       const response = await fetch(SCRIPT_URL);
       const data = await response.json();
       
-      if (data.clients && Array.isArray(data.clients)) {
-        setLocal(CLIENTS_KEY, data.clients);
-      }
-      if (data.invoices && Array.isArray(data.invoices)) {
-        setLocal(INVOICES_KEY, data.invoices);
-      }
+      _clients = Array.isArray(data.clients) ? data.clients : [];
+      _invoices = Array.isArray(data.invoices) ? data.invoices : [];
+      _settings = data.settings || DEFAULT_SETTINGS;
+      
       notifyListeners();
-      console.log('☁️ Datos cargados desde la nube');
+      console.log('✅ Datos descargados del Sheet:', data);
     } catch (error) {
-      console.error('⚠️ No se pudo cargar desde la nube, usando caché local', error);
+      console.error('❌ Fallo carga inicial:', error);
     }
   },
 
-  // --- Clients ---
-  getClients: (): Client[] => getLocal(CLIENTS_KEY, []),
+  getClients: (): Client[] => [..._clients],
   
-  saveClient: (client: Client) => {
-    const clients = getLocal(CLIENTS_KEY, [] as Client[]);
-    const index = clients.findIndex(c => c.id === client.id);
+  saveClient: async (client: Client) => {
+    const index = _clients.findIndex(c => c.id === client.id);
     if (index >= 0) {
-      clients[index] = client;
+      _clients[index] = client;
     } else {
-      clients.push({ ...client, id: client.id || crypto.randomUUID() });
+      _clients.push({ ...client, id: client.id || crypto.randomUUID() });
     }
-    setLocal(CLIENTS_KEY, clients);
     notifyListeners();
-    syncToCloud(); // Auto-save to Sheet
+    await pushToCloud();
   },
 
-  deleteClient: (id: string) => {
-    const clients = getLocal(CLIENTS_KEY, [] as Client[]);
-    const newClients = clients.filter(c => c.id !== id);
-    setLocal(CLIENTS_KEY, newClients);
+  deleteClient: async (id: string) => {
+    _clients = _clients.filter(c => c.id !== id);
     notifyListeners();
-    syncToCloud(); // Auto-save to Sheet
+    await pushToCloud();
   },
 
-  // --- Invoices ---
   getInvoices: (): Invoice[] => {
-     const invoices = getLocal(INVOICES_KEY, [] as Invoice[]);
-     return invoices.map(inv => ({
-         ...inv,
-         // Migration logic: Handle items that might still have old structure
-         items: (inv.items || []).map(item => ({
+     return _invoices.map(inv => {
+         const items = (inv.items || []).map(item => ({
              ...item,
-             weight: item.weight !== undefined ? item.weight : (item as any).weightLb || 0,
+             weight: safeParseFloat(item.weight !== undefined ? item.weight : (item as any).weightLb),
+             quantity: safeParseFloat(item.quantity),
+             originalPrice: safeParseFloat(item.originalPrice),
+             finalPrice: safeParseFloat(item.finalPrice),
+             commission: safeParseFloat(item.commission),
              weightUnit: item.weightUnit || 'lb'
-         })),
-         grandTotalUsd: typeof inv.grandTotalUsd === 'number' ? inv.grandTotalUsd : 0,
-         status: inv.status || InvoiceStatus.DRAFT
-     }));
+         }));
+
+         // Usar safeParseFloat para recuperar el costo de logística correctamente
+         // incluso si viene como string "15,00" del Sheet
+         const logisticsCost = safeParseFloat(inv.logisticsCost);
+         const exchangeRate = safeParseFloat(inv.exchangeRate) || _settings.exchangeRate || 1;
+
+         const totalProductCost = items.reduce((acc, item) => acc + (item.originalPrice * item.quantity), 0);
+         const totalProductSale = items.reduce((acc, item) => acc + (item.finalPrice * item.quantity), 0);
+         const totalCommissions = items.reduce((acc, item) => acc + (item.commission * item.quantity), 0);
+         
+         const grandTotalUsd = totalProductSale + logisticsCost;
+
+         return {
+             ...inv,
+             items,
+             exchangeRate,
+             totalProductCost,
+             totalProductSale,
+             totalCommissions,
+             logisticsCost, // Aquí se devuelve el valor recuperado, no 0
+             grandTotalUsd,
+             status: inv.status || InvoiceStatus.DRAFT
+         };
+     });
   },
 
-  saveInvoice: (invoice: Invoice) => {
-    const invoices = getLocal(INVOICES_KEY, [] as Invoice[]);
-    const index = invoices.findIndex(i => i.id === invoice.id);
+  saveInvoice: async (invoice: Invoice) => {
+    const index = _invoices.findIndex(i => i.id === invoice.id);
     
-    // Recalculate totals ensuring no NaN
-    const totalProductCost = (invoice.items || []).reduce((acc, item) => acc + ((item.originalPrice || 0) * (item.quantity || 0)), 0);
-    const totalProductSale = (invoice.items || []).reduce((acc, item) => acc + ((item.finalPrice || 0) * (item.quantity || 0)), 0);
-    const totalCommissions = (invoice.items || []).reduce((acc, item) => acc + ((item.commission || 0) * (item.quantity || 0)), 0);
+    const items = invoice.items || [];
+    const logisticsCost = safeParseFloat(invoice.logisticsCost);
     
+    // Recalcular derivados para consistencia, pero respetando logisticsCost
+    const totalProductCost = items.reduce((acc, item) => acc + ((item.originalPrice || 0) * (item.quantity || 0)), 0);
+    const totalProductSale = items.reduce((acc, item) => acc + ((item.finalPrice || 0) * (item.quantity || 0)), 0);
+    const totalCommissions = items.reduce((acc, item) => acc + ((item.commission || 0) * (item.quantity || 0)), 0);
+
     const finalInvoice: Invoice = {
       ...invoice,
+      logisticsCost, 
       updatedAt: new Date().toISOString(),
       totalProductCost,
       totalProductSale,
       totalCommissions,
-      grandTotalUsd: totalProductSale + (invoice.logisticsCost || 0)
+      grandTotalUsd: totalProductSale + logisticsCost
     };
 
     if (index >= 0) {
-      invoices[index] = finalInvoice;
+      _invoices[index] = finalInvoice;
     } else {
-      invoices.push({ ...finalInvoice, id: invoice.id || crypto.randomUUID(), createdAt: new Date().toISOString() });
+      _invoices.push({ ...finalInvoice, id: invoice.id || crypto.randomUUID(), createdAt: new Date().toISOString() });
     }
-    setLocal(INVOICES_KEY, invoices);
+    
     notifyListeners();
-    syncToCloud(); // Auto-save to Sheet
+    await pushToCloud();
   },
 
-  updateInvoiceStatus: (id: string, status: InvoiceStatus) => {
-    const invoices = getLocal(INVOICES_KEY, [] as Invoice[]);
-    const index = invoices.findIndex(i => i.id === id);
+  updateInvoiceStatus: async (id: string, status: InvoiceStatus) => {
+    const index = _invoices.findIndex(i => i.id === id);
     if (index >= 0) {
-        invoices[index] = { ...invoices[index], status, updatedAt: new Date().toISOString() };
-        setLocal(INVOICES_KEY, invoices);
+        _invoices[index] = { ..._invoices[index], status, updatedAt: new Date().toISOString() };
         notifyListeners();
-        syncToCloud();
+        await pushToCloud();
     }
   },
 
-  deleteInvoice: (id: string) => {
-    const invoices = getLocal(INVOICES_KEY, [] as Invoice[]);
-    const newInvoices = invoices.filter(i => i.id !== id);
-    setLocal(INVOICES_KEY, newInvoices);
+  deleteInvoice: async (id: string) => {
+    _invoices = _invoices.filter(i => i.id !== id);
     notifyListeners();
-    syncToCloud(); // Auto-save to Sheet
+    await pushToCloud();
   },
 
-  // --- Settings ---
-  getExchangeRate: (): number => {
-    const settings = getLocal(SETTINGS_KEY, DEFAULT_SETTINGS); 
-    return (typeof settings.exchangeRate === 'number') ? settings.exchangeRate : 40.5;
-  },
+  getExchangeRate: (): number => safeParseFloat(_settings.exchangeRate) || 40.5,
 
-  setExchangeRate: (rate: number) => {
-    const settings = getLocal(SETTINGS_KEY, DEFAULT_SETTINGS);
-    setLocal(SETTINGS_KEY, { ...settings, exchangeRate: rate });
+  setExchangeRate: async (rate: number) => {
+    _settings.exchangeRate = rate;
     notifyListeners();
+    await pushToCloud();
   },
 
-  getPricePerKg: (): number => {
-    const settings = getLocal(SETTINGS_KEY, DEFAULT_SETTINGS);
-    return (typeof settings.pricePerKg === 'number') ? settings.pricePerKg : 15.43;
-  },
+  getPricePerKg: (): number => safeParseFloat(_settings.pricePerKg) || 15.43,
 
-  setPricePerKg: (price: number) => {
-    const settings = getLocal(SETTINGS_KEY, DEFAULT_SETTINGS);
-    setLocal(SETTINGS_KEY, { ...settings, pricePerKg: price });
+  setPricePerKg: async (price: number) => {
+    _settings.pricePerKg = price;
     notifyListeners();
-  },
-
-  // Expose URL for other services if needed
-  getScriptUrl: () => SCRIPT_URL
+    await pushToCloud();
+  }
 };

@@ -9,12 +9,16 @@ export const ClientManager: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState<Partial<Client>>({});
 
   useEffect(() => {
     refreshClients();
+    // Subscribe to storage updates (e.g. from background fetch)
+    const unsubscribe = StorageService.subscribe(refreshClients);
+    return () => unsubscribe();
   }, []);
 
   const refreshClients = () => {
@@ -32,9 +36,11 @@ export const ClientManager: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.phone) return;
+    
+    setIsSaving(true);
 
     const clientToSave = {
       id: editingClient?.id || crypto.randomUUID(),
@@ -45,14 +51,15 @@ export const ClientManager: React.FC = () => {
       notes: formData.notes || ''
     } as Client;
 
-    StorageService.saveClient(clientToSave);
+    await StorageService.saveClient(clientToSave);
+    setIsSaving(false);
     refreshClients();
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('¿Estás seguro de eliminar este cliente?')) {
-      StorageService.deleteClient(id);
+      await StorageService.deleteClient(id);
       refreshClients();
     }
   };
@@ -153,8 +160,8 @@ export const ClientManager: React.FC = () => {
                 />
               </div>
               <div className="flex justify-end gap-3 pt-4">
-                <Button variant="secondary" type="button" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
-                <Button type="submit">Guardar</Button>
+                <Button variant="secondary" type="button" onClick={() => setIsModalOpen(false)} disabled={isSaving}>Cancelar</Button>
+                <Button type="submit" isLoading={isSaving}>{isSaving ? 'Guardando...' : 'Guardar'}</Button>
               </div>
             </form>
           </div>
