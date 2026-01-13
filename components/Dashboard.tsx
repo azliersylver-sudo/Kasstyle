@@ -3,18 +3,25 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Invoice, InvoiceStatus } from '../types';
 import { StorageService } from '../services/storage';
 import { GeminiService } from '../services/geminiService';
-import { DollarSign, TrendingUp, Package, AlertCircle, Sparkles } from 'lucide-react';
+import { DollarSign, TrendingUp, Package, AlertCircle, Sparkles, Settings } from 'lucide-react';
 import { Button } from './Button';
 
 export const Dashboard: React.FC = () => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [exchangeRate, setExchangeRate] = useState<number>(0);
+  const [pricePerKg, setPricePerKg] = useState<number>(0);
   const [geminiAnalysis, setGeminiAnalysis] = useState<string>('');
   const [loadingAi, setLoadingAi] = useState(false);
 
   useEffect(() => {
-    setInvoices(StorageService.getInvoices());
-    setExchangeRate(StorageService.getExchangeRate());
+    const loadSettings = () => {
+        setInvoices(StorageService.getInvoices());
+        setExchangeRate(StorageService.getExchangeRate());
+        setPricePerKg(StorageService.getPricePerKg());
+    };
+    loadSettings();
+    const unsubscribe = StorageService.subscribe(loadSettings);
+    return () => unsubscribe();
   }, []);
 
   const stats = useMemo(() => {
@@ -73,7 +80,13 @@ export const Dashboard: React.FC = () => {
     const newRate = prompt("Ingrese nueva tasa USD/Bs:", exchangeRate.toString());
     if (newRate && !isNaN(parseFloat(newRate))) {
         StorageService.setExchangeRate(parseFloat(newRate));
-        setExchangeRate(parseFloat(newRate));
+    }
+  }
+
+  const handlePricePerKgUpdate = () => {
+    const newPrice = prompt("Ingrese nuevo precio de envío por Kg ($):", pricePerKg.toString());
+    if (newPrice && !isNaN(parseFloat(newPrice))) {
+        StorageService.setPricePerKg(parseFloat(newPrice));
     }
   }
 
@@ -84,10 +97,28 @@ export const Dashboard: React.FC = () => {
            <h2 className="text-2xl font-bold text-slate-800">Resumen Financiero</h2>
            <p className="text-slate-500 text-sm">Visión general del negocio</p>
         </div>
-        <div className="flex items-center gap-2 bg-white p-2 rounded-lg shadow-sm border border-slate-200">
-           <span className="text-sm font-medium text-slate-600">Tasa BCV/Paralelo:</span>
-           <span className="text-lg font-bold text-emerald-600">{(exchangeRate || 0).toFixed(2)} Bs</span>
-           <Button size="sm" variant="ghost" onClick={handleRateUpdate}>Editar</Button>
+        
+        {/* Settings Bar */}
+        <div className="flex flex-wrap gap-3">
+             <div className="flex items-center gap-2 bg-white p-2 rounded-lg shadow-sm border border-slate-200">
+                <div className="flex flex-col">
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Tasa Cambio</span>
+                    <span className="text-sm font-bold text-emerald-600">{(exchangeRate || 0).toFixed(2)} Bs</span>
+                </div>
+                <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={handleRateUpdate}>
+                    <Settings size={14} />
+                </Button>
+            </div>
+
+            <div className="flex items-center gap-2 bg-white p-2 rounded-lg shadow-sm border border-slate-200">
+                <div className="flex flex-col">
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Envío / Kg</span>
+                    <span className="text-sm font-bold text-indigo-600">${(pricePerKg || 0).toFixed(2)}</span>
+                </div>
+                <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={handlePricePerKgUpdate}>
+                    <Settings size={14} />
+                </Button>
+            </div>
         </div>
       </div>
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Invoice, InvoiceStatus, ProductItem, Platform, Client } from '../types';
 import { StorageService } from '../services/storage';
 import { Button } from './Button';
-import { Trash2, Plus, ArrowLeft, Wand2 } from 'lucide-react';
+import { Trash2, Plus, ArrowLeft, Wand2, Calculator } from 'lucide-react';
 import { GeminiService } from '../services/geminiService';
 
 interface InvoiceFormProps {
@@ -20,10 +20,13 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
   const [items, setItems] = useState<ProductItem[]>([]);
   const [logisticsCost, setLogisticsCost] = useState(0);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [configPricePerKg, setConfigPricePerKg] = useState(15.43);
 
   useEffect(() => {
     setClients(StorageService.getClients());
     const currentRate = StorageService.getExchangeRate();
+    const currentPricePerKg = StorageService.getPricePerKg();
+    setConfigPricePerKg(currentPricePerKg);
 
     if (invoiceId) {
       const inv = StorageService.getInvoices().find(i => i.id === invoiceId);
@@ -44,26 +47,51 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
     }
   }, [invoiceId]);
 
+  // Effect to auto-calculate logistics when weight/items change
+  // Rule: Convert everything to KG first. 1 KG = 2.20462 LB.
+  const calculateSuggestedLogistics = (currentItems: ProductItem[]) => {
+    const totalKg = currentItems.reduce((acc, item) => {
+        const itemWeight = item.weight || 0;
+        const itemQty = item.quantity || 0;
+        // Convert to KG if LB, otherwise use as is
+        const weightInKg = item.weightUnit === 'lb' ? (itemWeight / 2.20462) : itemWeight;
+        return acc + (weightInKg * itemQty);
+    }, 0);
+
+    const pricePerKg = configPricePerKg;
+    return parseFloat((totalKg * pricePerKg).toFixed(2));
+  };
+
   const addItem = () => {
     const newItem: ProductItem = {
       id: crypto.randomUUID(),
       name: '',
       quantity: 1,
-      weightLb: 0,
+      weight: 0,
+      weightUnit: 'lb', // Default unit
       platform: Platform.SHEIN,
       originalPrice: 0,
       finalPrice: 0,
       commission: 0,
     };
-    setItems([...items, newItem]);
+    const newItems = [...items, newItem];
+    setItems(newItems);
   };
 
   const updateItem = (id: string, field: keyof ProductItem, value: any) => {
-    setItems(items.map(item => item.id === id ? { ...item, [field]: value } : item));
+    const newItems = items.map(item => item.id === id ? { ...item, [field]: value } : item);
+    setItems(newItems);
+    
+    // Auto-update logistics if weight, unit or quantity changes
+    if (field === 'weight' || field === 'quantity' || field === 'weightUnit') {
+        setLogisticsCost(calculateSuggestedLogistics(newItems));
+    }
   };
 
   const removeItem = (id: string) => {
-    setItems(items.filter(item => item.id !== id));
+    const newItems = items.filter(item => item.id !== id);
+    setItems(newItems);
+    setLogisticsCost(calculateSuggestedLogistics(newItems));
   };
 
   const handleAiDescription = async (id: string, name: string) => {
@@ -257,13 +285,23 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                                 />
                             </div>
                             <div className="md:col-span-2">
-                                <label className="text-xs text-slate-500">Peso (Lb)</label>
-                                <input 
-                                    type="number" step="0.1"
-                                    className="w-full text-sm border-slate-300 rounded-md border p-1" 
-                                    value={item.weightLb}
-                                    onChange={e => updateItem(item.id, 'weightLb', parseFloat(e.target.value))}
-                                />
+                                <label className="text-xs text-slate-500">Peso</label>
+                                <div className="flex">
+                                    <input 
+                                        type="number" step="0.1"
+                                        className="w-full text-sm border-slate-300 rounded-l-md border p-1" 
+                                        value={item.weight}
+                                        onChange={e => updateItem(item.id, 'weight', parseFloat(e.target.value))}
+                                    />
+                                    <select 
+                                        className="bg-slate-100 text-xs border border-l-0 border-slate-300 rounded-r-md px-1 focus:ring-0"
+                                        value={item.weightUnit}
+                                        onChange={e => updateItem(item.id, 'weightUnit', e.target.value)}
+                                    >
+                                        <option value="lb">Lb</option>
+                                        <option value="kg">Kg</option>
+                                    </select>
+                                </div>
                             </div>
                             <div className="md:col-span-4 flex items-end justify-end">
                                 <span className="text-xs text-slate-400 mr-2">Ganancia Item:</span>
@@ -295,10 +333,10 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                     </div>
                     <div className="flex justify-between">
                          <span className="text-slate-500 flex items-center gap-2">
-                            Costo Logística (Envío)
+                            Costo Logística (Auto Calc. ${configPricePerKg}/kg)
                             <input 
                                 type="number" 
-                                className="w-20 text-right p-1 border rounded text-xs" 
+                                className="w-20 text-right p-1 border rounded text-xs bg-white" 
                                 value={logisticsCost}
                                 onChange={e => setLogisticsCost(parseFloat(e.target.value) || 0)}
                             />

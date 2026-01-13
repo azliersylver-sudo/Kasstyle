@@ -1,8 +1,6 @@
-import React, { useState } from 'react';
-import { Menu, X, LayoutDashboard, FileText, Users, CloudOff, Settings, UploadCloud, DownloadCloud, Save } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Menu, X, LayoutDashboard, FileText, Users, CloudOff, Cloud, RefreshCw } from 'lucide-react';
 import { StorageService } from '../services/storage';
-import { SheetService } from '../services/sheetService';
-import { Button } from './Button';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -12,13 +10,20 @@ interface LayoutProps {
 
 export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange }) => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [scriptUrl, setScriptUrl] = useState(StorageService.getScriptUrl());
-  const [syncStatus, setSyncStatus] = useState<{loading: boolean; msg: string; type: 'success' | 'error' | 'neutral'}>({
-    loading: false, msg: '', type: 'neutral'
-  });
-  
+  const [isSyncing, setIsSyncing] = useState(false);
   const isOnline = navigator.onLine;
+
+  useEffect(() => {
+    // Initial fetch from cloud
+    setIsSyncing(true);
+    StorageService.init().finally(() => setIsSyncing(false));
+
+    // Optional: Subscribe to know when data changes happen (often implies a sync started)
+    const unsubscribe = StorageService.subscribe(() => {
+        // Just a visual flash could go here, but sync is handled in background
+    });
+    return () => unsubscribe();
+  }, []);
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -26,26 +31,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
     { id: 'clients', label: 'Clientes', icon: Users },
   ];
 
-  const handleSaveUrl = () => {
-    StorageService.setScriptUrl(scriptUrl);
-    setSyncStatus({ loading: false, msg: 'URL Guardada', type: 'success' });
-    setTimeout(() => setSyncStatus({ loading: false, msg: '', type: 'neutral' }), 2000);
-  };
-
-  const handleBackup = async () => {
-    setSyncStatus({ loading: true, msg: 'Subiendo datos...', type: 'neutral' });
-    const res = await SheetService.backupData();
-    setSyncStatus({ loading: false, msg: res.message, type: res.success ? 'success' : 'error' });
-  };
-
-  const handleRestore = async () => {
-    if (!confirm("Esto sobrescribirá los datos locales con los de Google Sheets. ¿Continuar?")) return;
-    setSyncStatus({ loading: true, msg: 'Descargando datos...', type: 'neutral' });
-    const res = await SheetService.restoreData();
-    setSyncStatus({ loading: false, msg: res.message, type: res.success ? 'success' : 'error' });
-    if (res.success) {
-      setTimeout(() => window.location.reload(), 1500); // Reload to reflect changes
-    }
+  const handleManualSync = () => {
+    setIsSyncing(true);
+    StorageService.init().finally(() => {
+        setIsSyncing(false);
+        alert("Datos sincronizados con Google Sheets");
+    });
   };
 
   return (
@@ -90,25 +81,24 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
           ))}
         </nav>
 
-        <div className="px-2 mb-2">
-            <button 
-                onClick={() => { setIsSettingsOpen(true); setSidebarOpen(false); }}
-                className="w-full flex items-center px-4 py-3 text-sm font-medium rounded-md text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
-            >
-                <Settings className="mr-3 h-5 w-5" />
-                Configuración / Sync
-            </button>
-        </div>
-
         <div className="p-4 bg-slate-800/50">
-           <div className={`flex items-center text-xs ${isOnline ? 'text-green-400' : 'text-orange-400'}`}>
+           <div className={`flex items-center text-xs mb-2 ${isOnline ? 'text-green-400' : 'text-orange-400'}`}>
              {isOnline ? (
-               <div className="h-2 w-2 rounded-full bg-green-500 mr-2 animate-pulse"></div>
+               <Cloud className="h-3 w-3 mr-2" />
              ) : (
                <CloudOff className="h-3 w-3 mr-2" />
              )}
-             {isOnline ? 'Online - Sincronizado' : 'Modo Offline Activo'}
+             {isOnline ? 'Conectado a Sheet' : 'Modo Offline'}
            </div>
+           
+           <button 
+             onClick={handleManualSync}
+             disabled={isSyncing || !isOnline}
+             className="w-full flex items-center justify-center px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded text-xs text-slate-200 transition-colors disabled:opacity-50"
+           >
+             <RefreshCw className={`h-3 w-3 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
+             {isSyncing ? 'Sincronizando...' : 'Forzar Sincronización'}
+           </button>
         </div>
       </aside>
 
@@ -125,83 +115,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
           className="fixed inset-0 bg-black/50 z-0 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         ></div>
-      )}
-
-      {/* Settings Modal */}
-      {isSettingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                        <Settings className="h-5 w-5" /> Configuración de Respaldo
-                    </h3>
-                    <button onClick={() => setIsSettingsOpen(false)} className="text-slate-400 hover:text-slate-600">
-                        <X size={24} />
-                    </button>
-                </div>
-
-                <div className="space-y-6">
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                            URL del Google Apps Script
-                        </label>
-                        <div className="flex gap-2">
-                            <input 
-                                type="text"
-                                className="flex-1 rounded-md border-slate-300 border p-2 text-sm focus:ring-indigo-500"
-                                placeholder="https://script.google.com/macros/s/..."
-                                value={scriptUrl}
-                                onChange={(e) => setScriptUrl(e.target.value)}
-                            />
-                            <Button size="sm" onClick={handleSaveUrl} disabled={syncStatus.loading}>
-                                <Save size={16} />
-                            </Button>
-                        </div>
-                        <p className="text-xs text-slate-500 mt-1">
-                            Implementa el script en Google Sheets y pega la URL aquí.
-                        </p>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="border border-slate-200 rounded-lg p-4 text-center hover:bg-slate-50 transition-colors">
-                            <UploadCloud className="mx-auto h-8 w-8 text-indigo-500 mb-2" />
-                            <h4 className="font-semibold text-slate-700">Respaldar</h4>
-                            <p className="text-xs text-slate-500 mb-3">Subir datos locales a Google Sheets</p>
-                            <Button 
-                                className="w-full" 
-                                onClick={handleBackup} 
-                                isLoading={syncStatus.loading && syncStatus.msg.includes('Subiendo')}
-                            >
-                                Subir Datos
-                            </Button>
-                        </div>
-
-                        <div className="border border-slate-200 rounded-lg p-4 text-center hover:bg-slate-50 transition-colors">
-                            <DownloadCloud className="mx-auto h-8 w-8 text-emerald-500 mb-2" />
-                            <h4 className="font-semibold text-slate-700">Restaurar</h4>
-                            <p className="text-xs text-slate-500 mb-3">Descargar datos de Sheets (Sobrescribe)</p>
-                            <Button 
-                                className="w-full" 
-                                variant="secondary" 
-                                onClick={handleRestore}
-                                isLoading={syncStatus.loading && syncStatus.msg.includes('Descargando')}
-                            >
-                                Bajar Datos
-                            </Button>
-                        </div>
-                    </div>
-
-                    {syncStatus.msg && (
-                        <div className={`p-3 rounded-md text-sm text-center ${
-                            syncStatus.type === 'success' ? 'bg-green-100 text-green-800' : 
-                            syncStatus.type === 'error' ? 'bg-red-100 text-red-800' : 'bg-blue-50 text-blue-800'
-                        }`}>
-                            {syncStatus.msg}
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
       )}
     </div>
   );

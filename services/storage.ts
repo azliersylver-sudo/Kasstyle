@@ -1,58 +1,30 @@
 import { Client, Invoice, InvoiceStatus, ProductItem, Platform } from '../types';
 
-// Keys for LocalStorage
+// Keys for LocalStorage (Still used for cache/offline)
 const CLIENTS_KEY = 'veneorders_clients';
 const INVOICES_KEY = 'veneorders_invoices';
 const SETTINGS_KEY = 'veneorders_settings';
 
-const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwVGUKUtZu-MSz1q2eBm5s0do8m6KtNsZy2v_TF3z5kZKz4EqkSxNjikn9Ckpn5x8e8EQ/exec';
-const DEFAULT_SETTINGS = { exchangeRate: 40.5, scriptUrl: DEFAULT_SCRIPT_URL };
+// TU URL DE GOOGLE APPS SCRIPT
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwVGUKUtZu-MSz1q2eBm5s0do8m6KtNsZy2v_TF3z5kZKz4EqkSxNjikn9Ckpn5x8e8EQ/exec';
 
-// Seed data to ensure the user sees something immediately
-const seedClients: Client[] = [
-  { id: '1', name: 'Maria Pérez', email: 'maria@gmail.com', phone: '0414-1234567', address: 'Caracas, Altamira' },
-  { id: '2', name: 'Jose Rodriguez', email: 'jose@hotmail.com', phone: '0424-9876543', address: 'Valencia, Prebo' },
-];
+const DEFAULT_SETTINGS = { exchangeRate: 40.5, pricePerKg: 15.43 };
 
-const seedInvoices: Invoice[] = [
-  {
-    id: 'inv_001',
-    clientId: '1',
-    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-    updatedAt: new Date().toISOString(),
-    status: InvoiceStatus.PAID,
-    exchangeRate: 36.5,
-    items: [
-      {
-        id: 'p1',
-        name: 'Vestido Floral',
-        quantity: 1,
-        weightLb: 0.5,
-        platform: Platform.SHEIN,
-        originalPrice: 12.00,
-        finalPrice: 15.00,
-        commission: 2.00,
-        trackingNumber: 'TRACK123'
-      }
-    ],
-    logisticsCost: 5.00,
-    totalProductCost: 12.00,
-    totalProductSale: 15.00,
-    totalCommissions: 2.00,
-    grandTotalUsd: 20.00 // 15 + 5
-  }
-];
+// Observer Pattern for real-time UI updates
+type Listener = () => void;
+let listeners: Listener[] = [];
 
-// Helper to simulate delay for "Async" feel if needed, but we keep it sync for speed
-const getStorage = <T>(key: string, seed: T): T => {
+const notifyListeners = () => {
+  listeners.forEach(l => l());
+};
+
+// Internal Helper: Local Storage (Cache)
+const getLocal = <T>(key: string, seed: T): T => {
   const data = localStorage.getItem(key);
-  if (!data) {
-    localStorage.setItem(key, JSON.stringify(seed));
-    return seed;
-  }
+  if (!data) return seed;
   try {
     const parsed = JSON.parse(data);
-    // Merge with seed to ensure new fields exist if structure changed (e.g. adding scriptUrl)
+    // Merge objects but not arrays
     if (typeof seed === 'object' && seed !== null && !Array.isArray(seed)) {
         return { ...seed, ...parsed };
     }
@@ -62,45 +34,104 @@ const getStorage = <T>(key: string, seed: T): T => {
   }
 };
 
-const setStorage = <T>(key: string, data: T) => {
+const setLocal = <T>(key: string, data: T) => {
   localStorage.setItem(key, JSON.stringify(data));
 };
 
+// Internal Helper: Cloud Sync
+const syncToCloud = async () => {
+  const data = {
+    clients: getLocal(CLIENTS_KEY, []),
+    invoices: getLocal(INVOICES_KEY, [])
+  };
+
+  try {
+    // We use text/plain to avoid CORS preflight OPTIONS request which GAS fails to handle
+    await fetch(SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors', 
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(data)
+    });
+    console.log('✅ Datos sincronizados con Google Sheet');
+  } catch (error) {
+    console.error('❌ Error sincronizando con Google Sheet:', error);
+  }
+};
+
 export const StorageService = {
-  getClients: (): Client[] => getStorage(CLIENTS_KEY, seedClients),
+  // Suscribe components to data changes
+  subscribe: (listener: Listener) => {
+    listeners.push(listener);
+    return () => {
+      listeners = listeners.filter(l => l !== listener);
+    };
+  },
+
+  // Initialize: Load from Cloud
+  init: async () => {
+    try {
+      const response = await fetch(SCRIPT_URL);
+      const data = await response.json();
+      
+      if (data.clients && Array.isArray(data.clients)) {
+        setLocal(CLIENTS_KEY, data.clients);
+      }
+      if (data.invoices && Array.isArray(data.invoices)) {
+        setLocal(INVOICES_KEY, data.invoices);
+      }
+      notifyListeners();
+      console.log('☁️ Datos cargados desde la nube');
+    } catch (error) {
+      console.error('⚠️ No se pudo cargar desde la nube, usando caché local', error);
+    }
+  },
+
+  // --- Clients ---
+  getClients: (): Client[] => getLocal(CLIENTS_KEY, []),
   
   saveClient: (client: Client) => {
-    const clients = getStorage(CLIENTS_KEY, seedClients);
+    const clients = getLocal(CLIENTS_KEY, [] as Client[]);
     const index = clients.findIndex(c => c.id === client.id);
     if (index >= 0) {
       clients[index] = client;
     } else {
-      clients.push({ ...client, id: crypto.randomUUID() });
+      clients.push({ ...client, id: client.id || crypto.randomUUID() });
     }
-    setStorage(CLIENTS_KEY, clients);
+    setLocal(CLIENTS_KEY, clients);
+    notifyListeners();
+    syncToCloud(); // Auto-save to Sheet
   },
 
   deleteClient: (id: string) => {
-    const clients = getStorage(CLIENTS_KEY, seedClients);
-    setStorage(CLIENTS_KEY, clients.filter(c => c.id !== id));
+    const clients = getLocal(CLIENTS_KEY, [] as Client[]);
+    const newClients = clients.filter(c => c.id !== id);
+    setLocal(CLIENTS_KEY, newClients);
+    notifyListeners();
+    syncToCloud(); // Auto-save to Sheet
   },
 
+  // --- Invoices ---
   getInvoices: (): Invoice[] => {
-     const invoices = getStorage(INVOICES_KEY, seedInvoices);
-     // Validate basic structure
+     const invoices = getLocal(INVOICES_KEY, [] as Invoice[]);
      return invoices.map(inv => ({
          ...inv,
-         items: inv.items || [],
+         // Migration logic: Handle items that might still have old structure
+         items: (inv.items || []).map(item => ({
+             ...item,
+             weight: item.weight !== undefined ? item.weight : (item as any).weightLb || 0,
+             weightUnit: item.weightUnit || 'lb'
+         })),
          grandTotalUsd: typeof inv.grandTotalUsd === 'number' ? inv.grandTotalUsd : 0,
          status: inv.status || InvoiceStatus.DRAFT
      }));
   },
 
   saveInvoice: (invoice: Invoice) => {
-    const invoices = getStorage(INVOICES_KEY, seedInvoices);
+    const invoices = getLocal(INVOICES_KEY, [] as Invoice[]);
     const index = invoices.findIndex(i => i.id === invoice.id);
     
-    // Auto calculate totals before saving to ensure consistency
+    // Recalculate totals ensuring no NaN
     const totalProductCost = (invoice.items || []).reduce((acc, item) => acc + ((item.originalPrice || 0) * (item.quantity || 0)), 0);
     const totalProductSale = (invoice.items || []).reduce((acc, item) => acc + ((item.finalPrice || 0) * (item.quantity || 0)), 0);
     const totalCommissions = (invoice.items || []).reduce((acc, item) => acc + ((item.commission || 0) * (item.quantity || 0)), 0);
@@ -119,45 +150,53 @@ export const StorageService = {
     } else {
       invoices.push({ ...finalInvoice, id: invoice.id || crypto.randomUUID(), createdAt: new Date().toISOString() });
     }
-    setStorage(INVOICES_KEY, invoices);
+    setLocal(INVOICES_KEY, invoices);
+    notifyListeners();
+    syncToCloud(); // Auto-save to Sheet
+  },
+
+  updateInvoiceStatus: (id: string, status: InvoiceStatus) => {
+    const invoices = getLocal(INVOICES_KEY, [] as Invoice[]);
+    const index = invoices.findIndex(i => i.id === id);
+    if (index >= 0) {
+        invoices[index] = { ...invoices[index], status, updatedAt: new Date().toISOString() };
+        setLocal(INVOICES_KEY, invoices);
+        notifyListeners();
+        syncToCloud();
+    }
   },
 
   deleteInvoice: (id: string) => {
-    const invoices = getStorage(INVOICES_KEY, seedInvoices);
-    setStorage(INVOICES_KEY, invoices.filter(i => i.id !== id));
+    const invoices = getLocal(INVOICES_KEY, [] as Invoice[]);
+    const newInvoices = invoices.filter(i => i.id !== id);
+    setLocal(INVOICES_KEY, newInvoices);
+    notifyListeners();
+    syncToCloud(); // Auto-save to Sheet
   },
 
+  // --- Settings ---
   getExchangeRate: (): number => {
-    const settings = getStorage(SETTINGS_KEY, DEFAULT_SETTINGS); 
+    const settings = getLocal(SETTINGS_KEY, DEFAULT_SETTINGS); 
     return (typeof settings.exchangeRate === 'number') ? settings.exchangeRate : 40.5;
   },
 
   setExchangeRate: (rate: number) => {
-    const settings = getStorage(SETTINGS_KEY, DEFAULT_SETTINGS);
-    setStorage(SETTINGS_KEY, { ...settings, exchangeRate: rate });
+    const settings = getLocal(SETTINGS_KEY, DEFAULT_SETTINGS);
+    setLocal(SETTINGS_KEY, { ...settings, exchangeRate: rate });
+    notifyListeners();
   },
 
-  // --- Sync Methods ---
-  
-  getScriptUrl: (): string => {
-    const settings = getStorage(SETTINGS_KEY, DEFAULT_SETTINGS);
-    return settings.scriptUrl || DEFAULT_SCRIPT_URL;
+  getPricePerKg: (): number => {
+    const settings = getLocal(SETTINGS_KEY, DEFAULT_SETTINGS);
+    return (typeof settings.pricePerKg === 'number') ? settings.pricePerKg : 15.43;
   },
 
-  setScriptUrl: (url: string) => {
-    const settings = getStorage(SETTINGS_KEY, DEFAULT_SETTINGS);
-    setStorage(SETTINGS_KEY, { ...settings, scriptUrl: url });
+  setPricePerKg: (price: number) => {
+    const settings = getLocal(SETTINGS_KEY, DEFAULT_SETTINGS);
+    setLocal(SETTINGS_KEY, { ...settings, pricePerKg: price });
+    notifyListeners();
   },
 
-  getAllData: () => {
-    return {
-      clients: getStorage(CLIENTS_KEY, seedClients),
-      invoices: getStorage(INVOICES_KEY, seedInvoices)
-    };
-  },
-
-  overwriteAllData: (clients: Client[], invoices: Invoice[]) => {
-    setStorage(CLIENTS_KEY, clients);
-    setStorage(INVOICES_KEY, invoices);
-  }
+  // Expose URL for other services if needed
+  getScriptUrl: () => SCRIPT_URL
 };

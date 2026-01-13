@@ -4,6 +4,7 @@ import { StorageService } from '../services/storage';
 import { Button } from './Button';
 import { Edit, Trash2 } from 'lucide-react';
 import { InvoiceForm } from './InvoiceForm';
+import { InvoiceDetailModal } from './InvoiceDetailModal';
 
 export const InvoiceList: React.FC = () => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -11,9 +12,11 @@ export const InvoiceList: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
 
   // Helper to get client name
   const getClientName = (id: string) => clients.find(c => c.id === id)?.name || 'Cliente desconocido';
+  const getClient = (id: string) => clients.find(c => c.id === id);
 
   const loadData = () => {
     setInvoices(StorageService.getInvoices().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
@@ -22,18 +25,26 @@ export const InvoiceList: React.FC = () => {
 
   useEffect(() => {
     loadData();
+    // Subscribe to changes (e.g. from cloud load or other components)
+    const unsubscribe = StorageService.subscribe(loadData);
+    return () => unsubscribe();
   }, []);
 
-  const handleDelete = (id: string) => {
-    if (confirm('¿Eliminar esta factura permanentemente?')) {
+  const handleDelete = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation(); // Prevent triggering row clicks
+    if (confirm('¿Estás seguro de que quieres eliminar esta factura permanentemente? Esta acción se sincronizará con la hoja de cálculo.')) {
       StorageService.deleteInvoice(id);
-      loadData();
     }
   };
 
-  const handleEdit = (id: string) => {
+  const handleEdit = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
     setEditingId(id);
     setIsFormOpen(true);
+  };
+
+  const handleRowClick = (invoice: Invoice) => {
+    setSelectedInvoice(invoice);
   };
 
   const handleNew = () => {
@@ -43,7 +54,12 @@ export const InvoiceList: React.FC = () => {
 
   const handleCloseForm = () => {
     setIsFormOpen(false);
-    loadData();
+  };
+  
+  const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>, id: string) => {
+    e.stopPropagation();
+    const newStatus = e.target.value as InvoiceStatus;
+    StorageService.updateInvoiceStatus(id, newStatus);
   };
 
   const filteredInvoices = invoices.filter(inv => {
@@ -53,11 +69,11 @@ export const InvoiceList: React.FC = () => {
 
   const getStatusColor = (status: InvoiceStatus) => {
     switch (status) {
-      case InvoiceStatus.PAID: return 'bg-green-100 text-green-800';
-      case InvoiceStatus.PENDING: return 'bg-yellow-100 text-yellow-800';
-      case InvoiceStatus.PARTIAL: return 'bg-blue-100 text-blue-800';
-      case InvoiceStatus.DRAFT: return 'bg-gray-100 text-gray-800';
-      case InvoiceStatus.DELIVERED: return 'bg-purple-100 text-purple-800';
+      case InvoiceStatus.PAID: return 'bg-green-100 text-green-800 border-green-200';
+      case InvoiceStatus.PENDING: return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case InvoiceStatus.PARTIAL: return 'bg-blue-100 text-blue-800 border-blue-200';
+      case InvoiceStatus.DRAFT: return 'bg-gray-100 text-gray-800 border-gray-200';
+      case InvoiceStatus.DELIVERED: return 'bg-purple-100 text-purple-800 border-purple-200';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -107,7 +123,11 @@ export const InvoiceList: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                     {filteredInvoices.map(inv => (
-                        <tr key={inv.id} className="hover:bg-slate-50 transition-colors">
+                        <tr 
+                            key={inv.id} 
+                            onClick={() => handleRowClick(inv)}
+                            className="hover:bg-indigo-50/50 transition-colors cursor-pointer"
+                        >
                             <td className="px-6 py-4">
                                 <div className="font-medium text-slate-900">{getClientName(inv.clientId)}</div>
                                 <div className="text-xs text-slate-500">{inv.items?.length || 0} productos</div>
@@ -115,20 +135,34 @@ export const InvoiceList: React.FC = () => {
                             <td className="px-6 py-4 text-sm text-slate-600">
                                 {new Date(inv.createdAt).toLocaleDateString()}
                             </td>
-                            <td className="px-6 py-4">
-                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(inv.status)}`}>
-                                    {inv.status}
-                                </span>
+                            <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                                <select
+                                    value={inv.status}
+                                    onChange={(e) => handleStatusChange(e, inv.id)}
+                                    className={`text-xs font-medium rounded-full px-2 py-1 border focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer ${getStatusColor(inv.status)}`}
+                                >
+                                    {Object.values(InvoiceStatus).map(s => (
+                                        <option key={s} value={s}>{s}</option>
+                                    ))}
+                                </select>
                             </td>
                             <td className="px-6 py-4 text-sm text-slate-900 font-bold text-right">
                                 ${(inv.grandTotalUsd || 0).toFixed(2)}
                             </td>
                             <td className="px-6 py-4 text-right">
                                 <div className="flex justify-end gap-2">
-                                    <button onClick={() => handleEdit(inv.id)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors">
+                                    <button 
+                                      onClick={(e) => handleEdit(e, inv.id)} 
+                                      className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-full transition-colors"
+                                      title="Editar completo"
+                                    >
                                         <Edit size={16} />
                                     </button>
-                                    <button onClick={() => handleDelete(inv.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors">
+                                    <button 
+                                      onClick={(e) => handleDelete(e, inv.id)} 
+                                      className="p-2 text-red-600 hover:bg-red-100 rounded-full transition-colors"
+                                      title="Eliminar"
+                                    >
                                         <Trash2 size={16} />
                                     </button>
                                 </div>
@@ -146,6 +180,15 @@ export const InvoiceList: React.FC = () => {
             </table>
         </div>
       </div>
+
+      {/* Detail Modal */}
+      {selectedInvoice && (
+        <InvoiceDetailModal 
+            invoice={selectedInvoice} 
+            client={getClient(selectedInvoice.clientId) || { id: '0', name: 'Desconocido', phone: '', address: '', email: '' }}
+            onClose={() => setSelectedInvoice(null)} 
+        />
+      )}
     </div>
   );
 };

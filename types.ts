@@ -19,7 +19,8 @@ export interface ProductItem {
   id: string;
   name: string;
   quantity: number;
-  weightLb: number;
+  weight: number; // Numeric value
+  weightUnit: 'lb' | 'kg'; // Unit selector
   platform: Platform;
   trackingNumber?: string;
   originalPrice: number; // Cost from platform
