@@ -1,8 +1,8 @@
 // --- CONFIGURACIÓN ---
-// Versión: 2.1 (Added Payment Tracking)
+// Versión: 2.2 (Fix Persistence of Amount Paid)
 
 const CLIENT_HEADERS = ['id', 'name', 'phone', 'email', 'address', 'notes'];
-// UPDATED: Added 'amountPaid'
+// CRITICAL: 'amountPaid' is required here for it to save
 const INVOICE_HEADERS = ['id', 'clientId', 'createdAt', 'updatedAt', 'status', 'exchangeRate', 'logisticsCost', 'amountPaid', 'grandTotalUsd', 'items'];
 const SETTINGS_HEADERS = ['key', 'value'];
 
@@ -17,12 +17,12 @@ function doGet(e) {
     const invoices = readSheetRows(ss, 'Invoices', INVOICE_HEADERS);
     const settings = readSettingsSheet(ss);
 
-    // Sanitize Numbers in Invoices specifically to prevent frontend crashes
+    // Sanitize Numbers
     const safeInvoices = invoices.map(inv => {
       return {
         ...inv,
         logisticsCost: safeNumber(inv.logisticsCost),
-        amountPaid: safeNumber(inv.amountPaid), // New field safety
+        amountPaid: safeNumber(inv.amountPaid), 
         grandTotalUsd: safeNumber(inv.grandTotalUsd),
         exchangeRate: safeNumber(inv.exchangeRate)
       };
@@ -61,11 +61,9 @@ function doPost(e) {
       const processedInvoices = body.invoices.map(inv => {
         return {
           ...inv,
-          // Convertir explícitamente a string JSON
           items: JSON.stringify(inv.items || []),
-          // Forzar números para que Sheets no ponga comillas
           logisticsCost: safeNumber(inv.logisticsCost),
-          amountPaid: safeNumber(inv.amountPaid), // Save amount paid
+          amountPaid: safeNumber(inv.amountPaid), // Ensure this is written
           grandTotalUsd: safeNumber(inv.grandTotalUsd),
           exchangeRate: safeNumber(inv.exchangeRate)
         };
@@ -90,11 +88,9 @@ function doPost(e) {
 
 // --- UTILIDADES ---
 
-// Convierte cualquier basura en un número flotante válido o 0
 function safeNumber(val) {
   if (typeof val === 'number') return val;
   if (!val) return 0;
-  // Reemplazar coma por punto para locales latinos
   const str = String(val).replace(',', '.');
   const num = parseFloat(str);
   return isNaN(num) ? 0 : num;
@@ -109,7 +105,7 @@ function readSheetRows(ss, sheetName, headers) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return []; 
 
-  // Leer valores crudos (getValues)
+  // Leer todo el rango
   const data = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
   
   return data.map(row => {
@@ -123,7 +119,7 @@ function readSheetRows(ss, sheetName, headers) {
             value = JSON.parse(value);
           } catch (e) { value = []; }
         } else {
-          value = []; // Fallback si no es JSON válido
+          value = []; 
         }
       }
       obj[header] = value;
@@ -157,17 +153,19 @@ function writeSheetRows(ss, sheetName, headers, dataArray) {
     sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold");
     sheet.setFrozenRows(1);
   } else {
-    // Asegurar que las cabeceras existen y están bien
+    // Si la hoja ya existe, verificamos si las cabeceras coinciden con las nuevas
     const currentHeaders = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
-    // Check if headers have changed (e.g. amountPaid added)
-    if (currentHeaders.length !== headers.length || currentHeaders[0] !== headers[0]) {
+    const headersChanged = currentHeaders.some((h, i) => h !== headers[i]);
+    
+    if (headersChanged) {
+       // Actualizar cabeceras si cambiaron (ej: se agregó amountPaid)
        sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     }
   }
 
   const lastRow = sheet.getLastRow();
   if (lastRow > 1) {
-    // Limpiar datos viejos
+    // Limpiar datos viejos pero mantener formato
     sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).clearContent();
   }
 

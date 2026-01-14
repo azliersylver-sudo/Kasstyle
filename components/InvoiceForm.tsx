@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Invoice, InvoiceStatus, ProductItem, Platform, Client } from '../types';
 import { StorageService } from '../services/storage';
 import { Button } from './Button';
-import { Trash2, Plus, ArrowLeft, Wand2, Calculator } from 'lucide-react';
+import { Trash2, Plus, ArrowLeft, Wand2, Calculator, Percent, Settings } from 'lucide-react';
 import { GeminiService } from '../services/geminiService';
 
 interface InvoiceFormProps {
@@ -24,6 +24,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
   const [configPricePerKg, setConfigPricePerKg] = useState(15.43);
   
   const [isSaving, setIsSaving] = useState(false);
+  const [showRateInput, setShowRateInput] = useState(false); // Toggle for exchange rate
   
   // Ref to track if the initial data has been loaded.
   const isLoadedRef = useRef(false);
@@ -175,6 +176,12 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
   const remainingBalance = Math.max(0, grandTotalUSD - amountPaid);
   const percentPaid = grandTotalUSD > 0 ? (amountPaid / grandTotalUSD) * 100 : 0;
 
+  // New Helper: Calculate 70%
+  const handleSetSeventyPercent = () => {
+    const seventyPercent = parseFloat((grandTotalUSD * 0.70).toFixed(2));
+    setAmountPaid(seventyPercent);
+  };
+
   return (
     <div className="bg-white min-h-screen sm:min-h-0 sm:rounded-lg shadow-xl flex flex-col h-full">
       {/* Header */}
@@ -196,9 +203,9 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
       </div>
 
       <div className="p-6 overflow-y-auto flex-1">
-        {/* Main Info */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <div className="md:col-span-2">
+        {/* Main Info - REMOVED EXCHANGE RATE INPUT FROM HERE */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+            <div className="lg:col-span-2">
                 <label className="block text-sm font-medium text-slate-700 mb-1">Cliente</label>
                 <select 
                     className="w-full rounded-md border-slate-300 border p-2 focus:ring-indigo-500"
@@ -218,15 +225,6 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                 >
                     {Object.values(InvoiceStatus).map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
-            </div>
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Tasa (Bs/USD)</label>
-                <input 
-                    type="number" 
-                    className="w-full rounded-md border-slate-300 border p-2 focus:ring-indigo-500"
-                    value={exchangeRate}
-                    onChange={e => setExchangeRate(parseFloat(e.target.value))}
-                />
             </div>
         </div>
 
@@ -398,9 +396,36 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                         <span>Total General (USD):</span>
                         <span>${grandTotalUSD.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between font-bold text-emerald-700">
-                        <span>Total en Bolívares:</span>
-                        <span>Bs {(!isNaN(grandTotalBs) ? grandTotalBs : 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    
+                    {/* Hidden Exchange Rate Logic */}
+                    <div className="flex flex-col gap-2 pt-2">
+                         <div className="flex justify-between font-bold text-emerald-700 items-center">
+                            <span>Total en Bolívares:</span>
+                            <div className="flex items-center gap-2">
+                                <span>Bs {(!isNaN(grandTotalBs) ? grandTotalBs : 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                <button 
+                                    onClick={() => setShowRateInput(!showRateInput)}
+                                    className="text-slate-400 hover:text-emerald-600 transition-colors"
+                                    title="Modificar Tasa de Cambio"
+                                >
+                                    <Settings size={14} />
+                                </button>
+                            </div>
+                        </div>
+                        
+                        {/* Conditional Exchange Rate Input */}
+                        {showRateInput && (
+                             <div className="flex justify-between items-center bg-white p-2 rounded border border-slate-200 animate-in fade-in slide-in-from-top-1">
+                                 <span className="text-xs text-slate-500">Tasa de Cambio (Bs/USD):</span>
+                                 <input 
+                                    type="number"
+                                    step="0.01"
+                                    className="w-24 text-right p-1 border border-slate-300 rounded text-xs focus:ring-indigo-500"
+                                    value={exchangeRate}
+                                    onChange={(e) => setExchangeRate(parseFloat(e.target.value))}
+                                 />
+                             </div>
+                        )}
                     </div>
                 </div>
 
@@ -418,7 +443,17 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                         </div>
                         
                         <div className="mb-4">
-                            <label className="block text-xs text-slate-500 mb-1">Monto Abonado (USD)</label>
+                            <div className="flex justify-between items-center mb-1">
+                                <label className="block text-xs text-slate-500">Monto Abonado (USD)</label>
+                                <Button 
+                                    size="sm" 
+                                    type="button"
+                                    onClick={handleSetSeventyPercent}
+                                    className="text-xs px-2 py-0.5 h-auto bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border-indigo-200"
+                                >
+                                    <Percent size={10} className="mr-1"/> 70%
+                                </Button>
+                            </div>
                             <div className="relative">
                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                     <span className="text-gray-500 sm:text-sm">$</span>

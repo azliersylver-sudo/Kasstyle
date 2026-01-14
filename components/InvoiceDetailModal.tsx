@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Invoice, Client, InvoiceStatus } from '../types';
 import { Button } from './Button';
-import { X, Printer, RefreshCw, ArrowRightLeft } from 'lucide-react';
+import { X, Printer, RefreshCw, ArrowRightLeft, ArrowLeftRight } from 'lucide-react';
 
 interface InvoiceDetailModalProps {
   invoice: Invoice;
@@ -11,31 +11,45 @@ interface InvoiceDetailModalProps {
 
 export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice, client, onClose }) => {
   const [currency, setCurrency] = useState<'USD' | 'Bs'>('USD');
+  const [isSwapped, setIsSwapped] = useState(false); 
 
-  // Calculate logic locally to guarantee consistency with what is shown in the table
-  // This prevents issues where the header "Total" is 0 but items have prices.
+  // Calculate logic locally
   const subTotalProducts = (invoice.items || []).reduce((acc, item) => acc + ((item.finalPrice || 0) * (item.quantity || 0)), 0);
   const totalCommissions = (invoice.items || []).reduce((acc, item) => acc + ((item.commission || 0) * (item.quantity || 0)), 0);
   
   const shippingCost = invoice.logisticsCost || 0;
-  // Note: The prompt asks for logistics to be "sum of shipping price + commission"
   const displayLogistics = shippingCost + totalCommissions;
   
   const grandTotal = subTotalProducts + displayLogistics;
+  const paidAmount = invoice.amountPaid || 0;
+  const remainingBalanceUSD = Math.max(0, grandTotal - paidAmount);
 
-  // Toggle Display Logic
   const rate = invoice.exchangeRate || 1;
-  const isBs = currency === 'Bs';
-  const symbol = isBs ? 'Bs' : '$';
+  const isBsContext = currency === 'Bs';
+
+  // --- Formatters ---
+  const formatUSD = (amount: number) => `$ ${(amount || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const formatBs = (amountUSD: number) => `Bs ${(amountUSD * rate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  // --- VIEW LOGIC ---
+  // State 1 (Default): "Todo en Bolívares menos el restante" -> Body: Bs, Remaining: USD
+  // State 2 (Swapped): "Todo en Dolares menos el restante" -> Body: USD, Remaining: Bs
   
-  const formatPrice = (amountUSD?: number) => {
-    const safeAmount = amountUSD || 0;
-    const val = isBs ? safeAmount * rate : safeAmount;
-    return `${symbol} ${(val || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
+  const showBodyInBs = isBsContext && !isSwapped;
+  const showRemainingInBs = isBsContext && isSwapped;
+
+  const formatBody = showBodyInBs ? formatBs : formatUSD;
+  const currencySymbolBody = showBodyInBs ? 'Bs' : '$';
+
+  const formatRemaining = showRemainingInBs ? formatBs : formatUSD;
 
   const toggleCurrency = () => {
     setCurrency(prev => prev === 'USD' ? 'Bs' : 'USD');
+    setIsSwapped(false); // Reset to default when entering Bs mode
+  };
+
+  const toggleSwap = () => {
+      setIsSwapped(!isSwapped);
   };
 
   const handlePrint = () => {
@@ -46,11 +60,16 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
       <tr style="border-bottom: 1px solid #eee;">
         <td style="padding: 8px;">${item.name}</td>
         <td style="padding: 8px; text-align: center;">${item.quantity}</td>
-        <td style="padding: 8px; text-align: right;">${formatPrice(item.finalPrice)}</td>
-        <td style="padding: 8px; text-align: right;">${formatPrice((item.finalPrice || 0) * (item.quantity || 0))}</td>
+        <td style="padding: 8px; text-align: right;">${formatBody(item.finalPrice)}</td>
+        <td style="padding: 8px; text-align: right;">${formatBody((item.finalPrice || 0) * (item.quantity || 0))}</td>
       </tr>
     `).join('');
 
+    // Payment Section for Print
+    const paidStr = formatBody(paidAmount);
+    const remainingStr = formatRemaining(remainingBalanceUSD);
+
+    // CLEAN PDF: No disclaimers about rates
     const html = `
       <html>
         <head>
@@ -67,6 +86,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
             .row { display: flex; justify-content: space-between; padding: 5px 0; }
             .grand-total { font-weight: bold; font-size: 18px; border-top: 2px solid #333; margin-top: 10px; padding-top: 10px; }
             .footer { margin-top: 60px; font-size: 12px; text-align: center; color: #777; border-top: 1px solid #eee; padding-top: 20px; }
+            .payment-info { border-top: 1px dashed #ccc; margin-top: 10px; padding-top: 10px; }
           </style>
         </head>
         <body>
@@ -106,17 +126,27 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
           <div class="totals">
             <div class="row">
               <span>Subtotal Productos:</span>
-              <span>${formatPrice(subTotalProducts)}</span>
+              <span>${formatBody(subTotalProducts)}</span>
             </div>
             <div class="row">
               <span>Logística y Manejo:</span>
-              <span>${formatPrice(displayLogistics)}</span>
+              <span>${formatBody(displayLogistics)}</span>
             </div>
             <div class="row grand-total">
-              <span>TOTAL ${currency}:</span>
-              <span>${formatPrice(grandTotal)}</span>
+              <span>TOTAL GENERAL (${currencySymbolBody}):</span>
+              <span>${formatBody(grandTotal)}</span>
             </div>
-            ${!isBs ? `<div class="row" style="color: #666; font-size: 12px; margin-top:5px;">Ref. Bs: ${formatPrice(grandTotal).replace('$', 'Bs ')} (Tasa: ${rate})</div>` : ''}
+            
+            <div class="payment-info">
+                <div class="row">
+                    <span>Abonado:</span>
+                    <span>${paidStr}</span>
+                </div>
+                <div class="row" style="color: ${remainingBalanceUSD <= 0 ? 'green' : '#d97706'}; font-weight: bold;">
+                    <span>Restante:</span>
+                    <span>${remainingStr}</span>
+                </div>
+            </div>
           </div>
 
           <div style="clear: both;"></div>
@@ -163,7 +193,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
              <div className="flex gap-2">
                  <Button variant="secondary" size="sm" onClick={toggleCurrency}>
                     <ArrowRightLeft className="w-4 h-4 mr-2" />
-                    Ver en {isBs ? 'USD' : 'Bs'}
+                    {isBsContext ? 'Volver a USD' : 'Ver en Bolívares'}
                  </Button>
                  <Button size="sm" onClick={handlePrint}>
                     <Printer className="w-4 h-4 mr-2" />
@@ -191,9 +221,9 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
                                 <div className="text-xs text-slate-400 font-normal">{item.platform}</div>
                             </td>
                             <td className="px-4 py-3 text-center text-slate-600">{item.quantity}</td>
-                            <td className="px-4 py-3 text-right text-slate-600">{formatPrice(item.finalPrice)}</td>
+                            <td className="px-4 py-3 text-right text-slate-600">{formatBody(item.finalPrice)}</td>
                             <td className="px-4 py-3 text-right text-slate-800 font-medium">
-                                {formatPrice((item.finalPrice || 0) * (item.quantity || 0))}
+                                {formatBody((item.finalPrice || 0) * (item.quantity || 0))}
                             </td>
                         </tr>
                     ))}
@@ -203,28 +233,60 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
 
           {/* Totals Section */}
           <div className="flex justify-end">
-             <div className="w-full sm:w-1/2 bg-white rounded-lg shadow-sm border border-slate-200 p-4 space-y-3 cursor-pointer hover:border-indigo-300 transition-colors" onClick={toggleCurrency} title="Clic para cambiar moneda">
+             <div className="w-full sm:w-1/2 bg-white rounded-lg shadow-sm border border-slate-200 p-4 space-y-3">
+                
                 <div className="flex justify-between text-sm text-slate-500">
                     <span>Subtotal Productos</span>
-                    <span>{formatPrice(subTotalProducts)}</span>
+                    <span>{formatBody(subTotalProducts)}</span>
                 </div>
                 <div className="flex justify-between text-sm text-slate-500">
                     <span>Logística y Manejo</span>
-                    <span>{formatPrice(displayLogistics)}</span>
+                    <span>{formatBody(displayLogistics)}</span>
                 </div>
                 <div className="border-t border-slate-100 pt-3 flex justify-between items-center">
                     <div>
                         <span className="block text-xs text-slate-400">Total General</span>
-                        <span className="font-bold text-xl text-indigo-700">{formatPrice(grandTotal)}</span>
+                        <span className="font-bold text-xl text-indigo-700">{formatBody(grandTotal)}</span>
                     </div>
-                    {isBs && (
-                         <div className="text-right">
-                             <span className="block text-xs text-slate-400">Tasa de Cambio</span>
-                             <span className="text-sm font-medium">{rate} Bs/$</span>
-                         </div>
-                    )}
                 </div>
-                <p className="text-center text-xs text-slate-300 mt-2 italic">Toca aquí para cambiar moneda</p>
+
+                <div className="border-t border-slate-100 pt-3 space-y-2">
+                    <div className="flex justify-between items-center text-sm text-slate-600">
+                        <div className="flex items-center gap-1">
+                            <span>Abonado</span>
+                        </div>
+                        <span>{formatBody(paidAmount)}</span>
+                    </div>
+                    <div className={`flex justify-between items-start text-sm font-bold ${remainingBalanceUSD <= 0 ? 'text-green-600' : 'text-orange-600'}`}>
+                        <div className="flex items-center gap-2">
+                            <span>Restante por Pagar</span>
+                            {/* Toggle Button Inside Bolivares Mode */}
+                            {isBsContext && remainingBalanceUSD > 0 && (
+                                <button 
+                                    onClick={toggleSwap}
+                                    className={`p-1 rounded-full transition-colors ${isSwapped ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                                    title="Intercambiar: Restante en Bs / Resto en $"
+                                >
+                                    <ArrowLeftRight size={14} />
+                                </button>
+                            )}
+                        </div>
+                        <div className="text-right">
+                             <span>{formatRemaining(remainingBalanceUSD)}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                {isBsContext && (
+                    <div 
+                        className="mt-2 text-center text-xs text-slate-400 italic cursor-pointer hover:text-indigo-400 transition-colors"
+                        onClick={toggleSwap}
+                    >
+                        {isSwapped 
+                            ? 'Viendo: Todo en USD, Restante en Bs' 
+                            : 'Viendo: Todo en Bs, Restante en USD'}
+                    </div>
+                )}
              </div>
           </div>
 
