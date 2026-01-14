@@ -113,7 +113,8 @@ export const StorageService = {
          const totalProductSale = items.reduce((acc, item) => acc + (item.finalPrice * item.quantity), 0);
          const totalCommissions = items.reduce((acc, item) => acc + (item.commission * item.quantity), 0);
          
-         const grandTotalUsd = totalProductSale + logisticsCost;
+         // UPDATE: Grand Total now includes commissions as requested
+         const grandTotalUsd = totalProductSale + logisticsCost + totalCommissions;
 
          return {
              ...inv,
@@ -122,7 +123,7 @@ export const StorageService = {
              totalProductCost,
              totalProductSale,
              totalCommissions,
-             logisticsCost, // Aquí se devuelve el valor recuperado, no 0
+             logisticsCost, 
              grandTotalUsd,
              status: inv.status || InvoiceStatus.DRAFT
          };
@@ -147,7 +148,8 @@ export const StorageService = {
       totalProductCost,
       totalProductSale,
       totalCommissions,
-      grandTotalUsd: totalProductSale + logisticsCost
+      // UPDATE: Save Grand Total including commissions
+      grandTotalUsd: totalProductSale + logisticsCost + totalCommissions
     };
 
     if (index >= 0) {

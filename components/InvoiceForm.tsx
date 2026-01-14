@@ -147,6 +147,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
     
     setIsSaving(true);
 
+    // Note: totalProductSale etc will be recalculated in StorageService based on items
     const invoice: Invoice = {
       id: invoiceId || crypto.randomUUID(),
       clientId,
@@ -170,7 +171,9 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
   // Calculations for display
   const totalProductsUSD = items.reduce((acc, i) => acc + ((i.finalPrice || 0) * (i.quantity || 0)), 0);
   const totalCommissions = items.reduce((acc, i) => acc + ((i.commission || 0) * (i.quantity || 0)), 0);
-  const grandTotalUSD = totalProductsUSD + (logisticsCost || 0);
+  
+  // UPDATE: Grand Total now includes Commissions + Logistics + Product Price
+  const grandTotalUSD = totalProductsUSD + (logisticsCost || 0) + totalCommissions;
   const grandTotalBs = grandTotalUSD * (exchangeRate || 0);
   
   const estimatedProfit = items.reduce((acc, i) => acc + (((i.finalPrice || 0) - (i.originalPrice || 0)) + (i.commission || 0)) * (i.quantity || 0), 0);
@@ -391,7 +394,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                          </div>
                     </div>
                     <div className="flex justify-between text-xs text-slate-400">
-                        <span>Comisiones Internas (Oculto al cliente):</span>
+                        <span>Comisiones Internas:</span>
                         <span>${totalCommissions.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between pt-2 border-t border-slate-300 font-bold text-lg text-indigo-700">
