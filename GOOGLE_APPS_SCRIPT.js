@@ -1,9 +1,9 @@
 // --- CONFIGURACIÓN ---
-// Versión: 2.0 (Robust Number Handling)
+// Versión: 2.1 (Added Payment Tracking)
 
 const CLIENT_HEADERS = ['id', 'name', 'phone', 'email', 'address', 'notes'];
-// Se asegura que logisticsCost y otros valores numéricos tengan su columna dedicada
-const INVOICE_HEADERS = ['id', 'clientId', 'createdAt', 'updatedAt', 'status', 'exchangeRate', 'logisticsCost', 'grandTotalUsd', 'items'];
+// UPDATED: Added 'amountPaid'
+const INVOICE_HEADERS = ['id', 'clientId', 'createdAt', 'updatedAt', 'status', 'exchangeRate', 'logisticsCost', 'amountPaid', 'grandTotalUsd', 'items'];
 const SETTINGS_HEADERS = ['key', 'value'];
 
 function doGet(e) {
@@ -22,6 +22,7 @@ function doGet(e) {
       return {
         ...inv,
         logisticsCost: safeNumber(inv.logisticsCost),
+        amountPaid: safeNumber(inv.amountPaid), // New field safety
         grandTotalUsd: safeNumber(inv.grandTotalUsd),
         exchangeRate: safeNumber(inv.exchangeRate)
       };
@@ -64,6 +65,7 @@ function doPost(e) {
           items: JSON.stringify(inv.items || []),
           // Forzar números para que Sheets no ponga comillas
           logisticsCost: safeNumber(inv.logisticsCost),
+          amountPaid: safeNumber(inv.amountPaid), // Save amount paid
           grandTotalUsd: safeNumber(inv.grandTotalUsd),
           exchangeRate: safeNumber(inv.exchangeRate)
         };
@@ -157,7 +159,8 @@ function writeSheetRows(ss, sheetName, headers, dataArray) {
   } else {
     // Asegurar que las cabeceras existen y están bien
     const currentHeaders = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
-    if (currentHeaders[0] !== headers[0]) {
+    // Check if headers have changed (e.g. amountPaid added)
+    if (currentHeaders.length !== headers.length || currentHeaders[0] !== headers[0]) {
        sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     }
   }

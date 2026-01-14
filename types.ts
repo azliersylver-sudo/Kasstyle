@@ -47,6 +47,9 @@ export interface Invoice {
   items: ProductItem[];
   logisticsCost: number; // Shipping fee
   
+  // Payment tracking
+  amountPaid: number; // New field for partial payments
+  
   // Calculated fields (persisted for ease of history)
   totalProductCost: number; // Sum of original prices
   totalProductSale: number; // Sum of final prices

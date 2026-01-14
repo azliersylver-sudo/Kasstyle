@@ -105,15 +105,14 @@ export const StorageService = {
          }));
 
          // Usar safeParseFloat para recuperar el costo de logística correctamente
-         // incluso si viene como string "15,00" del Sheet
          const logisticsCost = safeParseFloat(inv.logisticsCost);
          const exchangeRate = safeParseFloat(inv.exchangeRate) || _settings.exchangeRate || 1;
+         const amountPaid = safeParseFloat(inv.amountPaid); // Load amountPaid
 
          const totalProductCost = items.reduce((acc, item) => acc + (item.originalPrice * item.quantity), 0);
          const totalProductSale = items.reduce((acc, item) => acc + (item.finalPrice * item.quantity), 0);
          const totalCommissions = items.reduce((acc, item) => acc + (item.commission * item.quantity), 0);
          
-         // UPDATE: Grand Total now includes commissions as requested
          const grandTotalUsd = totalProductSale + logisticsCost + totalCommissions;
 
          return {
@@ -125,6 +124,7 @@ export const StorageService = {
              totalCommissions,
              logisticsCost, 
              grandTotalUsd,
+             amountPaid, // Return parsed amount
              status: inv.status || InvoiceStatus.DRAFT
          };
      });
@@ -135,8 +135,8 @@ export const StorageService = {
     
     const items = invoice.items || [];
     const logisticsCost = safeParseFloat(invoice.logisticsCost);
+    const amountPaid = safeParseFloat(invoice.amountPaid);
     
-    // Recalcular derivados para consistencia, pero respetando logisticsCost
     const totalProductCost = items.reduce((acc, item) => acc + ((item.originalPrice || 0) * (item.quantity || 0)), 0);
     const totalProductSale = items.reduce((acc, item) => acc + ((item.finalPrice || 0) * (item.quantity || 0)), 0);
     const totalCommissions = items.reduce((acc, item) => acc + ((item.commission || 0) * (item.quantity || 0)), 0);
@@ -144,11 +144,11 @@ export const StorageService = {
     const finalInvoice: Invoice = {
       ...invoice,
       logisticsCost, 
+      amountPaid, // Persist amount
       updatedAt: new Date().toISOString(),
       totalProductCost,
       totalProductSale,
       totalCommissions,
-      // UPDATE: Save Grand Total including commissions
       grandTotalUsd: totalProductSale + logisticsCost + totalCommissions
     };
 

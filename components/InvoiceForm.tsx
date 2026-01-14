@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Invoice, InvoiceStatus, ProductItem, Platform, Client } from '../types';
 import { StorageService } from '../services/storage';
 import { Button } from './Button';
-import { Trash2, Plus, ArrowLeft, Wand2 } from 'lucide-react';
+import { Trash2, Plus, ArrowLeft, Wand2, Calculator } from 'lucide-react';
 import { GeminiService } from '../services/geminiService';
 
 interface InvoiceFormProps {
@@ -19,6 +19,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
   const [exchangeRate, setExchangeRate] = useState(0);
   const [items, setItems] = useState<ProductItem[]>([]);
   const [logisticsCost, setLogisticsCost] = useState(0);
+  const [amountPaid, setAmountPaid] = useState(0); // New State
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [configPricePerKg, setConfigPricePerKg] = useState(15.43);
   
@@ -40,15 +41,13 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
         setClientId(inv.clientId || '');
         setStatus(inv.status || InvoiceStatus.DRAFT);
         setExchangeRate(typeof inv.exchangeRate === 'number' ? inv.exchangeRate : currentRate);
+        setAmountPaid(inv.amountPaid || 0); // Load amount paid
         
         const loadedItems = inv.items || [];
         setItems(loadedItems);
         
         // CRITICAL: Load saved cost OR Self-Heal if 0
         let loadedCost = inv.logisticsCost !== undefined ? inv.logisticsCost : 0;
-        
-        // If cost is 0 but we have items, it's likely a data error or fresh calculation needed.
-        // Recalculate immediately to fix display.
         if (loadedCost === 0 && loadedItems.length > 0) {
              const totalKg = loadedItems.reduce((acc, item) => {
                 const itemWeight = item.weight || 0;
@@ -61,7 +60,6 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                 loadedCost = parseFloat((totalKg * currentPricePerKg).toFixed(2));
             }
         }
-
         setLogisticsCost(loadedCost);
         
         try {
@@ -73,9 +71,9 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
     } else {
       setExchangeRate(currentRate);
       setLogisticsCost(0);
+      setAmountPaid(0);
     }
     
-    // Mark as loaded after a brief tick
     setTimeout(() => {
         isLoadedRef.current = true;
     }, 100);
@@ -86,7 +84,6 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
     const totalKg = currentItems.reduce((acc, item) => {
         const itemWeight = item.weight || 0;
         const itemQty = item.quantity || 0;
-        // Convert to KG if LB
         const weightInKg = item.weightUnit === 'lb' ? (itemWeight / 2.20462) : itemWeight;
         return acc + (weightInKg * itemQty);
     }, 0);
@@ -98,11 +95,8 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
     };
   };
 
-  // Auto-calculate logistics strictly when items or config changes, 
-  // BUT ONLY AFTER INITIAL LOAD
   useEffect(() => {
      if (!isLoadedRef.current && invoiceId) return;
-
      const result = calculateSuggestedLogistics(items);
      setLogisticsCost(result.cost);
   }, [items, configPricePerKg]);
@@ -147,7 +141,6 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
     
     setIsSaving(true);
 
-    // Note: totalProductSale etc will be recalculated in StorageService based on items
     const invoice: Invoice = {
       id: invoiceId || crypto.randomUUID(),
       clientId,
@@ -156,7 +149,8 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
       status,
       exchangeRate,
       items,
-      logisticsCost: logisticsCost, 
+      logisticsCost: logisticsCost,
+      amountPaid: amountPaid, // Save Paid Amount
       totalProductCost: 0, 
       totalProductSale: 0, 
       totalCommissions: 0, 
@@ -171,13 +165,15 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
   // Calculations for display
   const totalProductsUSD = items.reduce((acc, i) => acc + ((i.finalPrice || 0) * (i.quantity || 0)), 0);
   const totalCommissions = items.reduce((acc, i) => acc + ((i.commission || 0) * (i.quantity || 0)), 0);
-  
-  // UPDATE: Grand Total now includes Commissions + Logistics + Product Price
   const grandTotalUSD = totalProductsUSD + (logisticsCost || 0) + totalCommissions;
   const grandTotalBs = grandTotalUSD * (exchangeRate || 0);
   
   const estimatedProfit = items.reduce((acc, i) => acc + (((i.finalPrice || 0) - (i.originalPrice || 0)) + (i.commission || 0)) * (i.quantity || 0), 0);
   const currentTotalWeight = calculateSuggestedLogistics(items).totalWeight;
+
+  // Payment Stats
+  const remainingBalance = Math.max(0, grandTotalUSD - amountPaid);
+  const percentPaid = grandTotalUSD > 0 ? (amountPaid / grandTotalUSD) * 100 : 0;
 
   return (
     <div className="bg-white min-h-screen sm:min-h-0 sm:rounded-lg shadow-xl flex flex-col h-full">
@@ -369,12 +365,13 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
 
         {/* Totals Footer */}
         <div className="bg-slate-100 p-6 rounded-lg">
-            <h4 className="font-bold text-slate-700 mb-4 border-b border-slate-200 pb-2">Resumen de Totales</h4>
+            <h4 className="font-bold text-slate-700 mb-4 border-b border-slate-200 pb-2">Resumen de Totales y Pagos</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* Admin/Internal View */}
-                <div className="space-y-2 text-sm">
+                
+                {/* Left Column: Totals Calculation */}
+                <div className="space-y-2 text-sm border-r border-slate-200 pr-4">
                     <div className="flex justify-between">
-                        <span className="text-slate-500">Subtotal Productos (Venta):</span>
+                        <span className="text-slate-500">Subtotal Productos:</span>
                         <span className="font-medium">${totalProductsUSD.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
@@ -407,20 +404,61 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                     </div>
                 </div>
 
-                {/* Profit Analysis (Only for Admin) */}
-                <div className="bg-white p-4 rounded border border-slate-200">
-                    <h5 className="font-bold text-xs text-slate-400 uppercase tracking-wide mb-2">Análisis de Ganancia</h5>
-                    <div className="flex justify-between items-end">
-                        <div>
-                            <p className="text-3xl font-bold text-emerald-500">${estimatedProfit.toFixed(2)}</p>
-                            <p className="text-xs text-slate-400">Ganancia Neta Estimada</p>
+                {/* Right Column: Payment Control */}
+                <div className="space-y-4">
+                    <div className="bg-white p-4 rounded border border-blue-100 shadow-sm">
+                        <div className="flex items-center justify-between mb-2">
+                            <label className="text-sm font-bold text-slate-700 flex items-center">
+                                <Calculator className="w-4 h-4 mr-1 text-indigo-500"/> 
+                                Control de Pagos
+                            </label>
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded ${percentPaid >= 100 ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                                {percentPaid.toFixed(0)}% Pagado
+                            </span>
                         </div>
-                        <div className="text-right">
-                             <p className="text-xs text-slate-400">Margen</p>
-                             <p className="font-bold text-slate-700">
-                                {grandTotalUSD > 0 ? ((estimatedProfit / grandTotalUSD) * 100).toFixed(1) : 0}%
-                             </p>
+                        
+                        <div className="mb-4">
+                            <label className="block text-xs text-slate-500 mb-1">Monto Abonado (USD)</label>
+                            <div className="relative">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <span className="text-gray-500 sm:text-sm">$</span>
+                                </div>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    className="block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 border p-2"
+                                    placeholder="0.00"
+                                    value={amountPaid}
+                                    onChange={e => setAmountPaid(parseFloat(e.target.value))}
+                                />
+                            </div>
                         </div>
+
+                        {/* Visual Progress */}
+                        <div className="w-full bg-slate-200 rounded-full h-2.5 mb-2">
+                            <div 
+                                className={`h-2.5 rounded-full ${percentPaid >= 100 ? 'bg-green-500' : 'bg-blue-600'}`} 
+                                style={{ width: `${Math.min(100, percentPaid)}%` }}
+                            ></div>
+                        </div>
+
+                        <div className="flex justify-between items-center pt-2">
+                             <div>
+                                <p className="text-xs text-slate-400">Restante por Cobrar</p>
+                                <p className={`font-bold text-lg ${remainingBalance <= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                    ${remainingBalance.toFixed(2)}
+                                </p>
+                             </div>
+                             {remainingBalance <= 0 && (
+                                <span className="text-xs text-green-600 font-bold bg-green-50 px-2 py-1 rounded">¡Pagado!</span>
+                             )}
+                        </div>
+                    </div>
+                    
+                    {/* Admin Profit (Mini) */}
+                    <div className="text-right">
+                         <p className="text-xs text-slate-400">Ganancia Estimada</p>
+                         <p className="text-sm font-bold text-slate-700">${estimatedProfit.toFixed(2)}</p>
                     </div>
                 </div>
             </div>

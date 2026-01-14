@@ -31,30 +31,34 @@ export const Dashboard: React.FC = () => {
   }, []);
 
   const stats = useMemo(() => {
-    let revenue = 0;
-    let netProfit = 0;
-    let pending = 0;
+    let revenue = 0; // Total CASH collected (Abonos)
+    let netProfit = 0; // Realized Profit based on % paid
+    let pending = 0; // Total Remaining Balance
     let count = 0;
 
     invoices.forEach(inv => {
-      // Per prompt requirement: "Cálculo de ganancia neta: (precio con descuento - precio original + comisión)"
-      // Note: Excluding logistics from this specific calculation as per "Excluir precio logística"
+      const grandTotal = inv.grandTotalUsd || 0;
+      const amountPaid = inv.amountPaid || 0;
+      const remaining = Math.max(0, grandTotal - amountPaid);
       
+      // Revenue is strictly what has been paid
+      revenue += amountPaid;
+      pending += remaining;
+      count += 1;
+
+      // Profit Calculation (Realized)
+      // 1. Calculate Theoretical Total Profit for this invoice
       const invItems = inv.items || [];
-      const profitFromItems = invItems.reduce((acc, item) => {
+      const theoreticalProfit = invItems.reduce((acc, item) => {
         return acc + (((item.finalPrice || 0) - (item.originalPrice || 0)) + (item.commission || 0)) * (item.quantity || 0);
       }, 0);
 
-      netProfit += profitFromItems;
-      const total = inv.grandTotalUsd || 0;
-      revenue += total;
-      count += 1;
-
-      if (inv.status === InvoiceStatus.PENDING || inv.status === InvoiceStatus.DRAFT) {
-        pending += total;
-      } else if (inv.status === InvoiceStatus.PARTIAL) {
-        pending += (total * 0.3); // Assuming 30% pending
-      }
+      // 2. Calculate percentage of invoice paid
+      const percentPaid = grandTotal > 0 ? (amountPaid / grandTotal) : 0;
+      
+      // 3. Add proportional profit to Net Profit
+      // Example: If profit is $100 but they only paid 50%, realized profit is $50
+      netProfit += (theoreticalProfit * Math.min(1, percentPaid));
     });
 
     return { revenue, netProfit, pending, count };
@@ -63,12 +67,13 @@ export const Dashboard: React.FC = () => {
   const chartData = useMemo(() => {
     const data: Record<string, number> = {};
     invoices.forEach(inv => {
-      if (inv.status === InvoiceStatus.PAID || inv.status === InvoiceStatus.DELIVERED) {
-         // Group by month
-         const date = new Date(inv.createdAt);
-         const key = `${date.getMonth() + 1}/${date.getFullYear()}`;
-         data[key] = (data[key] || 0) + (inv.grandTotalUsd || 0);
-      }
+        // Chart now shows ACTUAL CASH FLOW (amountPaid) over time
+        // We use createdAt for simplicity, though ideally we'd track payment dates.
+        if (inv.amountPaid > 0) {
+            const date = new Date(inv.createdAt);
+            const key = `${date.getMonth() + 1}/${date.getFullYear()}`;
+            data[key] = (data[key] || 0) + (inv.amountPaid || 0);
+        }
     });
     return Object.entries(data).map(([name, value]) => ({ name, value }));
   }, [invoices]);
@@ -127,7 +132,7 @@ export const Dashboard: React.FC = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
            <h2 className="text-2xl font-bold text-slate-800">Resumen Financiero</h2>
-           <p className="text-slate-500 text-sm">Visión general del negocio</p>
+           <p className="text-slate-500 text-sm">Basado en flujo de caja real (Abonos)</p>
         </div>
         
         {/* Settings Bar */}
@@ -155,15 +160,15 @@ export const Dashboard: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Ingresos Totales (USD)" value={`$${(stats.revenue || 0).toFixed(2)}`} icon={DollarSign} color="indigo" />
-        <StatCard title="Ganancia Neta (USD)" value={`$${(stats.netProfit || 0).toFixed(2)}`} icon={TrendingUp} color="emerald" subtext="Sin logística" />
-        <StatCard title="Por Cobrar" value={`$${(stats.pending || 0).toFixed(2)}`} icon={AlertCircle} color="orange" />
+        <StatCard title="Dinero Recibido (USD)" value={`$${(stats.revenue || 0).toFixed(2)}`} icon={DollarSign} color="indigo" subtext="Suma de abonos reales" />
+        <StatCard title="Ganancia Realizada (USD)" value={`$${(stats.netProfit || 0).toFixed(2)}`} icon={TrendingUp} color="emerald" subtext="Proporcional al pagado" />
+        <StatCard title="Deuda por Cobrar" value={`$${(stats.pending || 0).toFixed(2)}`} icon={AlertCircle} color="orange" subtext="Dinero en la calle" />
         <StatCard title="Pedidos Totales" value={stats.count} icon={Package} color="blue" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <h3 className="text-lg font-semibold mb-4 text-slate-800">Ingresos Mensuales</h3>
+          <h3 className="text-lg font-semibold mb-4 text-slate-800">Flujo de Ingresos (Mensual)</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData}>

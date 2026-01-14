@@ -117,12 +117,18 @@ export const InvoiceList: React.FC = () => {
                         <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Cliente</th>
                         <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Fecha</th>
                         <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Estado</th>
-                        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Total (USD)</th>
+                        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Deuda</th>
+                        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Total</th>
                         <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Acciones</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                    {filteredInvoices.map(inv => (
+                    {filteredInvoices.map(inv => {
+                        const paid = inv.amountPaid || 0;
+                        const total = inv.grandTotalUsd || 0;
+                        const debt = Math.max(0, total - paid);
+
+                        return (
                         <tr 
                             key={inv.id} 
                             onClick={() => handleRowClick(inv)}
@@ -146,6 +152,13 @@ export const InvoiceList: React.FC = () => {
                                     ))}
                                 </select>
                             </td>
+                            <td className="px-6 py-4 text-sm font-bold text-right">
+                                {debt > 0.01 ? (
+                                    <span className="text-red-500">-${debt.toFixed(2)}</span>
+                                ) : (
+                                    <span className="text-green-500 font-medium">Pagado</span>
+                                )}
+                            </td>
                             <td className="px-6 py-4 text-sm text-slate-900 font-bold text-right">
                                 ${(inv.grandTotalUsd || 0).toFixed(2)}
                             </td>
@@ -168,10 +181,10 @@ export const InvoiceList: React.FC = () => {
                                 </div>
                             </td>
                         </tr>
-                    ))}
+                    )})}
                     {filteredInvoices.length === 0 && (
                         <tr>
-                            <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
+                            <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
                                 No se encontraron facturas con este filtro.
                             </td>
                         </tr>
