@@ -1,8 +1,8 @@
 // --- CONFIGURACIÓN ---
-// Versión: 2.2 (Fix Persistence of Amount Paid)
+// Versión: 3.0 (Fix Amount Paid Persistence & Headers)
 
 const CLIENT_HEADERS = ['id', 'name', 'phone', 'email', 'address', 'notes'];
-// CRITICAL: 'amountPaid' is required here for it to save
+// Added amountPaid explicitly. If your sheet doesn't have it, the script will now force-update headers.
 const INVOICE_HEADERS = ['id', 'clientId', 'createdAt', 'updatedAt', 'status', 'exchangeRate', 'logisticsCost', 'amountPaid', 'grandTotalUsd', 'items'];
 const SETTINGS_HEADERS = ['key', 'value'];
 
@@ -22,7 +22,7 @@ function doGet(e) {
       return {
         ...inv,
         logisticsCost: safeNumber(inv.logisticsCost),
-        amountPaid: safeNumber(inv.amountPaid), 
+        amountPaid: safeNumber(inv.amountPaid), // Critical read
         grandTotalUsd: safeNumber(inv.grandTotalUsd),
         exchangeRate: safeNumber(inv.exchangeRate)
       };
@@ -63,7 +63,7 @@ function doPost(e) {
           ...inv,
           items: JSON.stringify(inv.items || []),
           logisticsCost: safeNumber(inv.logisticsCost),
-          amountPaid: safeNumber(inv.amountPaid), // Ensure this is written
+          amountPaid: safeNumber(inv.amountPaid), // Critical write
           grandTotalUsd: safeNumber(inv.grandTotalUsd),
           exchangeRate: safeNumber(inv.exchangeRate)
         };
@@ -91,6 +91,7 @@ function doPost(e) {
 function safeNumber(val) {
   if (typeof val === 'number') return val;
   if (!val) return 0;
+  // Handle strings like "10,50" or "10.50"
   const str = String(val).replace(',', '.');
   const num = parseFloat(str);
   return isNaN(num) ? 0 : num;
@@ -105,7 +106,8 @@ function readSheetRows(ss, sheetName, headers) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return []; 
 
-  // Leer todo el rango
+  // Read all data
+  // Get range based on header length to ensure we try to read all expected columns
   const data = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
   
   return data.map(row => {
@@ -147,30 +149,41 @@ function readSettingsSheet(ss) {
 
 function writeSheetRows(ss, sheetName, headers, dataArray) {
   let sheet = ss.getSheetByName(sheetName);
+  
   if (!sheet) {
     sheet = ss.insertSheet(sheetName);
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold");
     sheet.setFrozenRows(1);
   } else {
-    // Si la hoja ya existe, verificamos si las cabeceras coinciden con las nuevas
-    const currentHeaders = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
-    const headersChanged = currentHeaders.some((h, i) => h !== headers[i]);
+    // Check if headers match. If the user has old columns, we update them.
+    const lastCol = Math.max(sheet.getLastColumn(), headers.length);
+    const currentHeaders = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+    
+    // Check if any header is different or missing
+    let headersChanged = false;
+    if (lastCol !== headers.length) headersChanged = true;
+    else {
+        headersChanged = currentHeaders.some((h, i) => h !== headers[i]);
+    }
     
     if (headersChanged) {
-       // Actualizar cabeceras si cambiaron (ej: se agregó amountPaid)
+       // Force update headers row
        sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+       // If sheet had more columns before, clear the extra ones on the right
+       if (lastCol > headers.length) {
+         sheet.getRange(1, headers.length + 1, sheet.getMaxRows(), lastCol - headers.length).clearContent();
+       }
     }
   }
 
-  const lastRow = sheet.getLastRow();
-  if (lastRow > 1) {
-    // Limpiar datos viejos pero mantener formato
-    sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).clearContent();
-  }
+  const lastRow = Math.max(sheet.getLastRow(), 2);
+  // Clear old data to prevent ghosts
+  sheet.getRange(2, 1, lastRow, headers.length).clearContent();
 
   if (!dataArray || dataArray.length === 0) return;
 
+  // Transform objects to arrays based on header order
   const rows = dataArray.map(obj => {
     return headers.map(header => {
       const val = obj[header];

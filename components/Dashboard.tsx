@@ -31,34 +31,43 @@ export const Dashboard: React.FC = () => {
   }, []);
 
   const stats = useMemo(() => {
-    let revenue = 0; // Total CASH collected (Abonos)
-    let netProfit = 0; // Realized Profit based on % paid
-    let pending = 0; // Total Remaining Balance
-    let count = 0;
+    let revenue = 0; // Dinero Recibido (Only from Allowed Statuses)
+    let netProfit = 0; // Ganancia Realizada (Only from Allowed Statuses)
+    let pending = 0; // Deuda por Cobrar (Includes Pending)
+    let count = 0; // Pedidos Activos (Excludes Draft)
+
+    // Allowed statuses for Revenue & Profit
+    const FINANCIALLY_ACTIVE_STATUSES = [InvoiceStatus.PARTIAL, InvoiceStatus.PAID, InvoiceStatus.DELIVERED];
 
     invoices.forEach(inv => {
+      // 1. RULE: Ignore DRAFTS completely
+      if (inv.status === InvoiceStatus.DRAFT) return;
+
       const grandTotal = inv.grandTotalUsd || 0;
       const amountPaid = inv.amountPaid || 0;
       const remaining = Math.max(0, grandTotal - amountPaid);
       
-      // Revenue is strictly what has been paid
-      revenue += amountPaid;
-      pending += remaining;
+      // 2. Count all valid orders (non-draft)
       count += 1;
 
-      // Profit Calculation (Realized)
-      // 1. Calculate Theoretical Total Profit for this invoice
-      const invItems = inv.items || [];
-      const theoreticalProfit = invItems.reduce((acc, item) => {
-        return acc + (((item.finalPrice || 0) - (item.originalPrice || 0)) + (item.commission || 0)) * (item.quantity || 0);
-      }, 0);
+      // 3. RULE: Pending adds to DEBT ("lo que falta por pagar")
+      // Actually, debt is remaining balance on ANY valid invoice (Pending, Partial, Paid, Delivered)
+      pending += remaining;
 
-      // 2. Calculate percentage of invoice paid
-      const percentPaid = grandTotal > 0 ? (amountPaid / grandTotal) : 0;
-      
-      // 3. Add proportional profit to Net Profit
-      // Example: If profit is $100 but they only paid 50%, realized profit is $50
-      netProfit += (theoreticalProfit * Math.min(1, percentPaid));
+      // 4. RULE: Only Abonado/Pagado/Entregado count for Revenue/Profit
+      if (FINANCIALLY_ACTIVE_STATUSES.includes(inv.status)) {
+         revenue += amountPaid;
+
+         const invItems = inv.items || [];
+         const theoreticalProfit = invItems.reduce((acc, item) => {
+            return acc + (((item.finalPrice || 0) - (item.originalPrice || 0)) + (item.commission || 0)) * (item.quantity || 0);
+         }, 0);
+
+         // Calculate realized profit based on % paid
+         const percentPaid = grandTotal > 0 ? (amountPaid / grandTotal) : 0;
+         netProfit += (theoreticalProfit * Math.min(1, percentPaid));
+      }
+      // Note: PENDING status contributes 0 to revenue and 0 to profit here, as requested.
     });
 
     return { revenue, netProfit, pending, count };
@@ -66,10 +75,13 @@ export const Dashboard: React.FC = () => {
 
   const chartData = useMemo(() => {
     const data: Record<string, number> = {};
+    const FINANCIALLY_ACTIVE_STATUSES = [InvoiceStatus.PARTIAL, InvoiceStatus.PAID, InvoiceStatus.DELIVERED];
+
     invoices.forEach(inv => {
-        // Chart now shows ACTUAL CASH FLOW (amountPaid) over time
-        // We use createdAt for simplicity, though ideally we'd track payment dates.
-        if (inv.amountPaid > 0) {
+        if (inv.status === InvoiceStatus.DRAFT) return;
+
+        // Only chart cash flow from active statuses
+        if (FINANCIALLY_ACTIVE_STATUSES.includes(inv.status) && inv.amountPaid > 0) {
             const date = new Date(inv.createdAt);
             const key = `${date.getMonth() + 1}/${date.getFullYear()}`;
             data[key] = (data[key] || 0) + (inv.amountPaid || 0);
@@ -81,7 +93,8 @@ export const Dashboard: React.FC = () => {
   const handleAiAnalysis = async () => {
     setLoadingAi(true);
     const clients = StorageService.getClients();
-    const text = await GeminiService.analyzeFinancials(invoices, clients);
+    const validInvoices = invoices.filter(i => i.status !== InvoiceStatus.DRAFT);
+    const text = await GeminiService.analyzeFinancials(validInvoices, clients);
     setGeminiAnalysis(text);
     setLoadingAi(false);
   };
@@ -117,7 +130,7 @@ export const Dashboard: React.FC = () => {
         } else {
             await StorageService.setPricePerKg(num);
         }
-        loadSettings(); // Refresh UI immediately
+        loadSettings(); 
         setEditModal(null);
     } catch (error) {
         console.error("Error saving setting:", error);
@@ -132,7 +145,7 @@ export const Dashboard: React.FC = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
            <h2 className="text-2xl font-bold text-slate-800">Resumen Financiero</h2>
-           <p className="text-slate-500 text-sm">Basado en flujo de caja real (Abonos)</p>
+           <p className="text-slate-500 text-sm">Finanzas basadas en pedidos Abonados, Pagados o Entregados</p>
         </div>
         
         {/* Settings Bar */}
@@ -160,10 +173,10 @@ export const Dashboard: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Dinero Recibido (USD)" value={`$${(stats.revenue || 0).toFixed(2)}`} icon={DollarSign} color="indigo" subtext="Suma de abonos reales" />
+        <StatCard title="Dinero Recibido (USD)" value={`$${(stats.revenue || 0).toFixed(2)}`} icon={DollarSign} color="indigo" subtext="Solo Pagados/Abonados" />
         <StatCard title="Ganancia Realizada (USD)" value={`$${(stats.netProfit || 0).toFixed(2)}`} icon={TrendingUp} color="emerald" subtext="Proporcional al pagado" />
-        <StatCard title="Deuda por Cobrar" value={`$${(stats.pending || 0).toFixed(2)}`} icon={AlertCircle} color="orange" subtext="Dinero en la calle" />
-        <StatCard title="Pedidos Totales" value={stats.count} icon={Package} color="blue" />
+        <StatCard title="Deuda por Cobrar" value={`$${(stats.pending || 0).toFixed(2)}`} icon={AlertCircle} color="orange" subtext="Incluye pedidos pendientes" />
+        <StatCard title="Pedidos Activos" value={stats.count} icon={Package} color="blue" subtext="No incluye borradores" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

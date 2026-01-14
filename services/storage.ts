@@ -1,7 +1,7 @@
 import { Client, Invoice, InvoiceStatus, ProductItem } from '../types';
 
-// TU URL DE GOOGLE APPS SCRIPT
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxIRSEi8RsnQqD8kvbkZ3lYMDTx-HNc6PTVokC3Q8ld2LdFxLgAG2BSGT2ZjAw3Pd0SYw/exec';
+// TU URL DE GOOGLE APPS SCRIPT - ACTUALIZADA
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbySF0TpviuKK2snM2piFc1Zlu3nH6Cz8O4jaH4jajic3gOsLlbDtblAjNluW90E04jwQw/exec';
 
 const DEFAULT_SETTINGS = { exchangeRate: 40.5, pricePerKg: 15.43 };
 
