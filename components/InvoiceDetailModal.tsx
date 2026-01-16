@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Invoice, Client, InvoiceStatus } from '../types';
 import { Button } from './Button';
 import { StorageService } from '../services/storage';
-import { X, Printer, ArrowRightLeft, ArrowLeftRight } from 'lucide-react';
+import { X, Printer, ArrowRightLeft, ArrowLeftRight, FileSearch } from 'lucide-react';
 
 interface InvoiceDetailModalProps {
   invoice: Invoice;
@@ -50,7 +50,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
       setIsSwapped(!isSwapped);
   };
 
-  const handlePrint = () => {
+  const handlePreview = () => {
     // Obtener precio por Kg actual para el desglose (fallback)
     const pricePerKg = StorageService.getPricePerKg();
 
@@ -85,122 +85,192 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
     const remainingStr = formatRemaining(remainingBalanceUSD);
 
     const html = `
-      <html>
+      <!DOCTYPE html>
+      <html lang="es">
         <head>
-          <title>Factura #${invoice.id.slice(0, 8)}</title>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Factura #${invoice.id.slice(0, 8)} - KASSTYLE</title>
           <style>
-            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #333; }
-            .header { display: flex; justify-content: space-between; margin-bottom: 40px; border-bottom: 2px solid #3e136b; padding-bottom: 20px; }
-            .title { font-size: 24px; font-weight: bold; text-transform: uppercase; color: #3e136b; }
-            .meta { text-align: right; font-size: 14px; }
-            .client-info { margin-bottom: 30px; }
+            /* Reset & Base */
+            * { box-sizing: border-box; }
+            body { 
+                font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; 
+                margin: 0; 
+                padding: 0; 
+                background-color: #f1f5f9; 
+                color: #333; 
+                -webkit-print-color-adjust: exact;
+            }
+            
+            /* Control Bar (Not Printed) */
+            .control-bar {
+              background-color: #3e136b;
+              color: white;
+              padding: 12px 20px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+              position: sticky;
+              top: 0;
+              z-index: 1000;
+            }
+            .brand-preview { font-weight: bold; font-size: 18px; letter-spacing: 0.5px; }
+            
+            .btn-group { display: flex; gap: 10px; }
+            .btn {
+              border: none;
+              padding: 10px 20px;
+              border-radius: 6px;
+              font-weight: 600;
+              cursor: pointer;
+              font-size: 14px;
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              transition: transform 0.1s;
+            }
+            .btn:active { transform: scale(0.98); }
+            .btn-primary { background: white; color: #3e136b; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+            .btn-secondary { background: rgba(255,255,255,0.15); color: white; }
+            .btn-secondary:hover { background: rgba(255,255,255,0.25); }
+
+            /* Paper Sheet */
+            .page-container {
+              max-width: 800px;
+              margin: 30px auto;
+              background: white;
+              padding: 40px;
+              box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+              border-radius: 8px;
+            }
+
+            /* Invoice Styles */
+            .header { display: flex; justify-content: space-between; margin-bottom: 40px; border-bottom: 3px solid #3e136b; padding-bottom: 20px; }
+            .title { font-size: 28px; font-weight: 800; text-transform: uppercase; color: #3e136b; letter-spacing: -0.5px; }
+            .subtitle { font-size: 12px; margin-top: 5px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; }
+            
+            .meta { text-align: right; font-size: 14px; line-height: 1.6; }
+            .meta strong { color: #334155; }
+            
+            .client-box { background: #f8fafc; padding: 20px; border-radius: 6px; border-left: 4px solid #cbd5e1; margin-bottom: 30px; }
+            .client-info { font-size: 14px; line-height: 1.6; }
+            
             table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-            th { text-align: left; background: #f8fafc; padding: 10px; border-bottom: 2px solid #ddd; font-size: 11px; text-transform: uppercase; }
+            th { text-align: left; background: #f1f5f9; color: #475569; padding: 12px; border-bottom: 2px solid #e2e8f0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
+            td { padding: 12px; border-bottom: 1px solid #e2e8f0; font-size: 13px; color: #1e293b; }
+            
             .totals { float: right; width: 300px; }
-            .row { display: flex; justify-content: space-between; padding: 5px 0; }
-            .grand-total { font-weight: bold; font-size: 18px; border-top: 2px solid #3e136b; margin-top: 10px; padding-top: 10px; }
-            .footer { margin-top: 60px; font-size: 12px; text-align: center; color: #777; border-top: 1px solid #eee; padding-top: 20px; }
-            .payment-info { border-top: 1px dashed #ccc; margin-top: 10px; padding-top: 10px; }
+            .row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; }
+            .grand-total { font-weight: 800; font-size: 18px; border-top: 2px solid #3e136b; margin-top: 10px; padding-top: 15px; color: #3e136b; }
+            
+            .payment-info { border-top: 1px dashed #cbd5e1; margin-top: 15px; padding-top: 15px; }
+            
+            .footer { margin-top: 80px; font-size: 11px; text-align: center; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 20px; }
+
+            /* Print Overrides */
             @media print {
-               @page { margin: 0; }
-               body { padding: 40px; -webkit-print-color-adjust: exact; }
+              .control-bar { display: none !important; }
+              body { background: white; margin: 0; }
+              .page-container { 
+                box-shadow: none; 
+                margin: 0; 
+                width: 100%; 
+                max-width: none; 
+                padding: 0; /* Remove padding to fit paper better */
+              }
             }
           </style>
         </head>
         <body>
-          <div class="header">
-            <div>
-              <div class="title">KASSTYLE</div>
-              <div style="font-size: 12px; margin-top: 5px;">Servicio de Importación Internacional</div>
-            </div>
-            <div class="meta">
-              <div><strong>Factura:</strong> #${invoice.id.slice(0, 8)}</div>
-              <div><strong>Fecha:</strong> ${new Date(invoice.createdAt).toLocaleDateString()}</div>
-              <div><strong>Estado:</strong> ${invoice.status}</div>
-            </div>
+          <div class="control-bar">
+             <div class="brand-preview">KASSTYLE <span style="font-weight:400; font-size:14px; opacity:0.8;">| Vista Previa</span></div>
+             <div class="btn-group">
+                <button class="btn btn-secondary" onclick="window.close()">Cerrar</button>
+                <button class="btn btn-primary" onclick="window.print()">
+                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+                   Imprimir / Descargar
+                </button>
+             </div>
           </div>
 
-          <div class="client-info">
-            <strong>Cliente:</strong><br/>
-            ${client.name}<br/>
-            ${client.phone}<br/>
-            ${client.address || ''}
-          </div>
-
-          <table>
-            <thead>
-              <tr>
-                <th width="40%">Descripción</th>
-                <th width="10%" style="text-align: center;">Cant.</th>
-                <th width="15%" style="text-align: right;">Precio Unit.</th>
-                <th width="15%" style="text-align: right;">Envío</th>
-                <th width="20%" style="text-align: right;">TOTAL</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${itemsHtml}
-            </tbody>
-          </table>
-
-          <div class="totals">
-            <!-- Nota: Al desglosar logística en las filas, la suma de las filas es el Total General -->
-            <div class="row grand-total">
-              <span>TOTAL GENERAL (${currencySymbolBody}):</span>
-              <span>${formatBody(grandTotal)}</span>
+          <div class="page-container">
+            <div class="header">
+              <div>
+                <div class="title">KASSTYLE</div>
+                <div class="subtitle">Servicio de Importación Internacional</div>
+              </div>
+              <div class="meta">
+                <div><strong>Factura:</strong> #${invoice.id.slice(0, 8)}</div>
+                <div><strong>Fecha:</strong> ${new Date(invoice.createdAt).toLocaleDateString()}</div>
+                <div><strong>Estado:</strong> ${invoice.status}</div>
+              </div>
             </div>
-            
-            <div class="payment-info">
-                <div class="row">
-                    <span>Abonado:</span>
-                    <span>${paidStr}</span>
-                </div>
-                <div class="row" style="color: ${remainingBalanceUSD <= 0 ? 'green' : '#d97706'}; font-weight: bold;">
-                    <span>Restante:</span>
-                    <span>${remainingStr}</span>
-                </div>
+
+            <div class="client-box">
+              <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700; margin-bottom: 5px;">Cliente</div>
+              <div class="client-info">
+                <strong>${client.name}</strong><br/>
+                ${client.phone}<br/>
+                ${client.address || ''}
+              </div>
             </div>
-          </div>
 
-          <div style="clear: both;"></div>
+            <table>
+              <thead>
+                <tr>
+                  <th width="40%">Descripción</th>
+                  <th width="10%" style="text-align: center;">Cant.</th>
+                  <th width="15%" style="text-align: right;">Precio Unit.</th>
+                  <th width="15%" style="text-align: right;">Envío</th>
+                  <th width="20%" style="text-align: right;">TOTAL</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsHtml}
+              </tbody>
+            </table>
 
-          <div class="footer">
-            <p>Gracias por su preferencia.</p>
+            <div class="totals">
+              <!-- Nota: Al desglosar logística en las filas, la suma de las filas es el Total General -->
+              <div class="row grand-total">
+                <span>TOTAL GENERAL (${currencySymbolBody}):</span>
+                <span>${formatBody(grandTotal)}</span>
+              </div>
+              
+              <div class="payment-info">
+                  <div class="row">
+                      <span>Abonado:</span>
+                      <span>${paidStr}</span>
+                  </div>
+                  <div class="row" style="color: ${remainingBalanceUSD <= 0 ? '#10b981' : '#d97706'}; font-weight: bold;">
+                      <span>Restante:</span>
+                      <span>${remainingStr}</span>
+                  </div>
+              </div>
+            </div>
+
+            <div style="clear: both;"></div>
+
+            <div class="footer">
+              <p>Gracias por su preferencia.</p>
+              <p style="margin-top: 5px;">KASSTYLE Manager</p>
+            </div>
           </div>
         </body>
       </html>
     `;
 
-    // Direct Print for Mobile/Desktop (avoids pop-up blockers)
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = '0';
-    document.body.appendChild(iframe);
-
-    const doc = iframe.contentWindow?.document;
-    if (doc) {
-        doc.open();
-        doc.write(html);
-        doc.close();
-
-        setTimeout(() => {
-            iframe.contentWindow?.focus();
-            try {
-                iframe.contentWindow?.print();
-            } catch (e) {
-                console.error("Print failed", e);
-            }
-            
-            // Clean up
-            setTimeout(() => {
-                if (document.body.contains(iframe)) {
-                    document.body.removeChild(iframe);
-                }
-            }, 5000); 
-        }, 500);
+    // Open in New Window/Tab (Mobile Friendly)
+    const win = window.open('', '_blank');
+    if (win) {
+        win.document.write(html);
+        win.document.close();
+        // Focus for desktop usability
+        win.focus();
+    } else {
+        alert("Por favor, permite las ventanas emergentes (pop-ups) para ver la factura.");
     }
   };
 
@@ -236,9 +306,9 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
                     <ArrowRightLeft className="w-4 h-4 mr-2" />
                     {isBsContext ? 'Volver a USD' : 'Ver en Bolívares'}
                  </Button>
-                 <Button size="sm" onClick={handlePrint}>
-                    <Printer className="w-4 h-4 mr-2" />
-                    Descargar PDF
+                 <Button size="sm" onClick={handlePreview} className="bg-brand hover:bg-brand-light text-white">
+                    <FileSearch className="w-4 h-4 mr-2" />
+                    Vista Previa PDF
                  </Button>
              </div>
           </div>
