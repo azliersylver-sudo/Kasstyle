@@ -1,9 +1,14 @@
 // --- CONFIGURACIÓN ---
-// Versión: 3.0 (Fix Amount Paid Persistence & Headers)
+// Versión: 4.3 (Corrección de Guardado de Gastos)
+//
+// --- LIBRERÍAS REQUERIDAS ---
+// Por favor, agrega la siguiente biblioteca en el editor de Apps Script (Recursos > Bibliotecas):
+// ID: 1ZpY_UxTyIHZMW2_Yu90Yoq9XPlks9iAdgKOUXgP46d2Ks4ZeFt-JSRe5
+// Versión: 7
 
 const CLIENT_HEADERS = ['id', 'name', 'phone', 'email', 'address', 'notes'];
-// Added amountPaid explicitly. If your sheet doesn't have it, the script will now force-update headers.
 const INVOICE_HEADERS = ['id', 'clientId', 'createdAt', 'updatedAt', 'status', 'exchangeRate', 'logisticsCost', 'amountPaid', 'grandTotalUsd', 'items'];
+const EXPENSE_HEADERS = ['id', 'description', 'amount', 'category', 'date'];
 const SETTINGS_HEADERS = ['key', 'value'];
 
 function doGet(e) {
@@ -15,6 +20,7 @@ function doGet(e) {
     
     const clients = readSheetRows(ss, 'Clients', CLIENT_HEADERS);
     const invoices = readSheetRows(ss, 'Invoices', INVOICE_HEADERS);
+    const expenses = readSheetRows(ss, 'Expenses', EXPENSE_HEADERS);
     const settings = readSettingsSheet(ss);
 
     // Sanitize Numbers
@@ -22,15 +28,21 @@ function doGet(e) {
       return {
         ...inv,
         logisticsCost: safeNumber(inv.logisticsCost),
-        amountPaid: safeNumber(inv.amountPaid), // Critical read
+        amountPaid: safeNumber(inv.amountPaid), 
         grandTotalUsd: safeNumber(inv.grandTotalUsd),
         exchangeRate: safeNumber(inv.exchangeRate)
       };
     });
 
+    const safeExpenses = expenses.map(exp => ({
+        ...exp,
+        amount: safeNumber(exp.amount)
+    }));
+
     const result = {
       clients: clients,
       invoices: safeInvoices,
+      expenses: safeExpenses,
       settings: settings
     };
 
@@ -47,33 +59,60 @@ function doGet(e) {
 
 function doPost(e) {
   const lock = LockService.getScriptLock();
-  lock.waitLock(30000); 
+  // Aumentamos el tiempo de espera del lock para evitar colisiones
+  lock.waitLock(45000); 
 
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const body = JSON.parse(e.postData.contents);
+    // Parseo robusto del body
+    const jsonString = e.postData.contents;
+    const body = JSON.parse(jsonString);
     
+    // 1. Clients
     if (body.clients) {
-      writeSheetRows(ss, 'Clients', CLIENT_HEADERS, body.clients);
+      try {
+        writeSheetRows(ss, 'Clients', CLIENT_HEADERS, body.clients);
+      } catch (err) { console.error("Error writing Clients", err); }
     }
     
+    // 2. Invoices
     if (body.invoices) {
-      const processedInvoices = body.invoices.map(inv => {
-        return {
+      try {
+        const processedInvoices = body.invoices.map(inv => ({
           ...inv,
           items: JSON.stringify(inv.items || []),
           logisticsCost: safeNumber(inv.logisticsCost),
-          amountPaid: safeNumber(inv.amountPaid), // Critical write
+          amountPaid: safeNumber(inv.amountPaid),
           grandTotalUsd: safeNumber(inv.grandTotalUsd),
           exchangeRate: safeNumber(inv.exchangeRate)
-        };
-      });
-      writeSheetRows(ss, 'Invoices', INVOICE_HEADERS, processedInvoices);
+        }));
+        writeSheetRows(ss, 'Invoices', INVOICE_HEADERS, processedInvoices);
+      } catch (err) { console.error("Error writing Invoices", err); }
+    }
+
+    // 3. Expenses - CRITICAL: Independent Block
+    if (body.expenses) {
+      try {
+        const processedExpenses = body.expenses.map(exp => ({
+            ...exp,
+            amount: safeNumber(exp.amount),
+            date: exp.date ? String(exp.date) : new Date().toISOString()
+        }));
+        writeSheetRows(ss, 'Expenses', EXPENSE_HEADERS, processedExpenses);
+        // Force flush specifically after expenses to ensure persistence
+        SpreadsheetApp.flush();
+      } catch (err) { console.error("Error writing Expenses", err); }
     }
     
+    // 4. Settings
     if (body.settings) {
-      writeSettingsSheet(ss, body.settings);
+       try {
+        writeSettingsSheet(ss, body.settings);
+       } catch (err) { console.error("Error writing Settings", err); }
     }
+    
+    // Force final flush
+    SpreadsheetApp.flush();
 
     return ContentService.createTextOutput(JSON.stringify({ status: 'success' }))
       .setMimeType(ContentService.MimeType.JSON);
@@ -90,11 +129,15 @@ function doPost(e) {
 
 function safeNumber(val) {
   if (typeof val === 'number') return val;
-  if (!val) return 0;
+  if (!val && val !== 0) return 0;
   // Handle strings like "10,50" or "10.50"
-  const str = String(val).replace(',', '.');
-  const num = parseFloat(str);
-  return isNaN(num) ? 0 : num;
+  try {
+    const str = String(val).replace(',', '.');
+    const num = parseFloat(str);
+    return isNaN(num) ? 0 : num;
+  } catch (e) {
+    return 0;
+  }
 }
 
 // --- FUNCIONES DE LECTURA ---
@@ -150,6 +193,7 @@ function readSettingsSheet(ss) {
 function writeSheetRows(ss, sheetName, headers, dataArray) {
   let sheet = ss.getSheetByName(sheetName);
   
+  // Create sheet if not exists
   if (!sheet) {
     sheet = ss.insertSheet(sheetName);
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
@@ -177,9 +221,12 @@ function writeSheetRows(ss, sheetName, headers, dataArray) {
     }
   }
 
-  const lastRow = Math.max(sheet.getLastRow(), 2);
   // Clear old data to prevent ghosts
-  sheet.getRange(2, 1, lastRow, headers.length).clearContent();
+  // Start from row 2, and clear all subsequent rows
+  const maxRows = sheet.getMaxRows();
+  if (maxRows > 1) {
+    sheet.getRange(2, 1, maxRows - 1, headers.length).clearContent();
+  }
 
   if (!dataArray || dataArray.length === 0) return;
 

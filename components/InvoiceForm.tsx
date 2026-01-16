@@ -19,7 +19,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
   const [exchangeRate, setExchangeRate] = useState(0);
   const [items, setItems] = useState<ProductItem[]>([]);
   const [logisticsCost, setLogisticsCost] = useState(0);
-  const [amountPaid, setAmountPaid] = useState(0); // New State
+  const [amountPaid, setAmountPaid] = useState(0); 
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [configPricePerKg, setConfigPricePerKg] = useState(15.43);
   
@@ -134,6 +134,52 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
     if (desc) updateItem(id, 'name', desc);
   };
 
+  // --- LOGIC: STATUS -> AMOUNT ---
+  const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newStatus = e.target.value as InvoiceStatus;
+    setStatus(newStatus);
+
+    const currentTotalProducts = items.reduce((acc, i) => acc + ((i.finalPrice || 0) * (i.quantity || 0)), 0);
+    const currentTotalCommissions = items.reduce((acc, i) => acc + ((i.commission || 0) * (i.quantity || 0)), 0);
+    const currentGrandTotal = currentTotalProducts + (logisticsCost || 0) + currentTotalCommissions;
+
+    if (newStatus === InvoiceStatus.PAID || newStatus === InvoiceStatus.DELIVERED) {
+        setAmountPaid(parseFloat(currentGrandTotal.toFixed(2)));
+    } else if (newStatus === InvoiceStatus.PENDING) {
+        setAmountPaid(0);
+    }
+  };
+
+  // --- LOGIC: AMOUNT -> STATUS ---
+  const handleAmountInput = (val: string) => {
+    const num = parseFloat(val);
+    const newAmount = isNaN(num) ? 0 : num;
+    setAmountPaid(newAmount);
+
+    // Calculate Current Total
+    const currentTotalProducts = items.reduce((acc, i) => acc + ((i.finalPrice || 0) * (i.quantity || 0)), 0);
+    const currentTotalCommissions = items.reduce((acc, i) => acc + ((i.commission || 0) * (i.quantity || 0)), 0);
+    const currentGrandTotal = parseFloat((currentTotalProducts + (logisticsCost || 0) + currentTotalCommissions).toFixed(2));
+    
+    // Auto-update status if not in Draft and not Delivered (unless user changes it manually later)
+    if (status !== InvoiceStatus.DRAFT) {
+        if (currentGrandTotal > 0) {
+            // 1. Between 0% and 100% -> PARTIAL (Abonado)
+            if (newAmount > 0 && newAmount < currentGrandTotal) {
+                setStatus(InvoiceStatus.PARTIAL);
+            } 
+            // 2. 0% -> PENDING
+            else if (newAmount === 0) {
+                setStatus(InvoiceStatus.PENDING);
+            }
+            // 3. 100% or more -> PAID (Only if not Delivered)
+            else if (newAmount >= currentGrandTotal && status !== InvoiceStatus.DELIVERED) {
+                setStatus(InvoiceStatus.PAID);
+            }
+        }
+    }
+  };
+
   const handleSave = async () => {
     if (!clientId) {
       alert("Seleccione un cliente");
@@ -151,7 +197,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
       exchangeRate,
       items,
       logisticsCost: logisticsCost,
-      amountPaid: amountPaid, // Save Paid Amount
+      amountPaid: amountPaid, 
       totalProductCost: 0, 
       totalProductSale: 0, 
       totalCommissions: 0, 
@@ -176,10 +222,15 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
   const remainingBalance = Math.max(0, grandTotalUSD - amountPaid);
   const percentPaid = grandTotalUSD > 0 ? (amountPaid / grandTotalUSD) * 100 : 0;
 
-  // New Helper: Calculate 70%
+  // New Helper: Calculate 70% and Set Status
   const handleSetSeventyPercent = () => {
     const seventyPercent = parseFloat((grandTotalUSD * 0.70).toFixed(2));
     setAmountPaid(seventyPercent);
+    
+    // Explicitly set Partial if appropriate
+    if (status !== InvoiceStatus.DRAFT && status !== InvoiceStatus.DELIVERED) {
+        setStatus(InvoiceStatus.PARTIAL);
+    }
   };
 
   return (
@@ -221,7 +272,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                 <select 
                     className="w-full rounded-md border-slate-300 border p-2 focus:ring-indigo-500"
                     value={status}
-                    onChange={e => setStatus(e.target.value as InvoiceStatus)}
+                    onChange={handleStatusChange}
                 >
                     {Object.values(InvoiceStatus).map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
@@ -464,7 +515,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                                     className="block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 border p-2"
                                     placeholder="0.00"
                                     value={amountPaid}
-                                    onChange={e => setAmountPaid(parseFloat(e.target.value))}
+                                    onChange={e => handleAmountInput(e.target.value)}
                                 />
                             </div>
                         </div>

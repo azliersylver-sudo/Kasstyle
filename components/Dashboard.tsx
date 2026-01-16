@@ -1,60 +1,81 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { Invoice, InvoiceStatus } from '../types';
+import { Invoice, InvoiceStatus, Expense } from '../types';
 import { StorageService } from '../services/storage';
 import { GeminiService } from '../services/geminiService';
-import { DollarSign, TrendingUp, Package, AlertCircle, Sparkles, Settings, X } from 'lucide-react';
+import { DollarSign, TrendingUp, Package, AlertCircle, Sparkles, Settings, X, Calendar, FileDown, TrendingDown, Percent } from 'lucide-react';
 import { Button } from './Button';
+
+type TimeRange = 'week' | 'month' | 'year' | 'all';
 
 export const Dashboard: React.FC = () => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [exchangeRate, setExchangeRate] = useState<number>(0);
   const [pricePerKg, setPricePerKg] = useState<number>(0);
   const [geminiAnalysis, setGeminiAnalysis] = useState<string>('');
   const [loadingAi, setLoadingAi] = useState(false);
+  
+  // Time Filter State
+  const [timeRange, setTimeRange] = useState<TimeRange>('month');
 
   // State for Settings Modal
   const [editModal, setEditModal] = useState<{ type: 'rate' | 'price'; value: string } | null>(null);
   const [isSavingSetting, setIsSavingSetting] = useState(false);
 
   // Helper to load all data from storage
-  const loadSettings = () => {
+  const loadData = () => {
       setInvoices(StorageService.getInvoices());
+      setExpenses(StorageService.getExpenses());
       setExchangeRate(StorageService.getExchangeRate());
       setPricePerKg(StorageService.getPricePerKg());
   };
 
   useEffect(() => {
-    loadSettings();
-    const unsubscribe = StorageService.subscribe(loadSettings);
+    loadData();
+    const unsubscribe = StorageService.subscribe(loadData);
     return () => unsubscribe();
   }, []);
 
+  // --- Date Filtering Logic ---
+  const { filteredInvoices, filteredExpenses } = useMemo(() => {
+    const now = new Date();
+    let startDate = new Date(0); // Epoch for 'all'
+
+    if (timeRange === 'week') {
+        startDate = new Date();
+        startDate.setDate(now.getDate() - 7);
+    } else if (timeRange === 'month') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    } else if (timeRange === 'year') {
+        startDate = new Date(now.getFullYear(), 0, 1);
+    }
+
+    const fInvoices = invoices.filter(inv => new Date(inv.createdAt) >= startDate);
+    const fExpenses = expenses.filter(exp => new Date(exp.date) >= startDate);
+
+    return { filteredInvoices: fInvoices, filteredExpenses: fExpenses };
+  }, [invoices, expenses, timeRange]);
+
   const stats = useMemo(() => {
     let revenue = 0; // Dinero Recibido (Only from Allowed Statuses)
-    let netProfit = 0; // Ganancia Realizada (Only from Allowed Statuses)
-    let pending = 0; // Deuda por Cobrar (Includes Pending)
-    let count = 0; // Pedidos Activos (Excludes Draft)
+    let grossProfit = 0; // Ganancia Operativa (Ventas)
+    let pending = 0; // Deuda por Cobrar
+    let count = 0; // Pedidos Activos
 
-    // Allowed statuses for Revenue & Profit
     const FINANCIALLY_ACTIVE_STATUSES = [InvoiceStatus.PARTIAL, InvoiceStatus.PAID, InvoiceStatus.DELIVERED];
 
-    invoices.forEach(inv => {
-      // 1. RULE: Ignore DRAFTS completely
+    // 1. Calculate Income & Gross Profit
+    filteredInvoices.forEach(inv => {
       if (inv.status === InvoiceStatus.DRAFT) return;
 
       const grandTotal = inv.grandTotalUsd || 0;
       const amountPaid = inv.amountPaid || 0;
       const remaining = Math.max(0, grandTotal - amountPaid);
       
-      // 2. Count all valid orders (non-draft)
       count += 1;
-
-      // 3. RULE: Pending adds to DEBT ("lo que falta por pagar")
-      // Actually, debt is remaining balance on ANY valid invoice (Pending, Partial, Paid, Delivered)
       pending += remaining;
 
-      // 4. RULE: Only Abonado/Pagado/Entregado count for Revenue/Profit
       if (FINANCIALLY_ACTIVE_STATUSES.includes(inv.status)) {
          revenue += amountPaid;
 
@@ -65,140 +86,242 @@ export const Dashboard: React.FC = () => {
 
          // Calculate realized profit based on % paid
          const percentPaid = grandTotal > 0 ? (amountPaid / grandTotal) : 0;
-         netProfit += (theoreticalProfit * Math.min(1, percentPaid));
+         grossProfit += (theoreticalProfit * Math.min(1, percentPaid));
       }
-      // Note: PENDING status contributes 0 to revenue and 0 to profit here, as requested.
     });
 
-    return { revenue, netProfit, pending, count };
-  }, [invoices]);
+    // 2. Calculate Expenses
+    const totalExpenses = filteredExpenses.reduce((acc, exp) => acc + exp.amount, 0);
+
+    // 3. Real Net Profit
+    const netProfit = grossProfit - totalExpenses;
+    
+    // 4. Profit Margin (Net Profit / Revenue)
+    const profitMargin = revenue > 0 ? (netProfit / revenue) * 100 : 0;
+
+    return { revenue, grossProfit, netProfit, pending, count, totalExpenses, profitMargin };
+  }, [filteredInvoices, filteredExpenses]);
 
   const chartData = useMemo(() => {
     const data: Record<string, number> = {};
     const FINANCIALLY_ACTIVE_STATUSES = [InvoiceStatus.PARTIAL, InvoiceStatus.PAID, InvoiceStatus.DELIVERED];
 
-    invoices.forEach(inv => {
+    filteredInvoices.forEach(inv => {
         if (inv.status === InvoiceStatus.DRAFT) return;
 
-        // Only chart cash flow from active statuses
         if (FINANCIALLY_ACTIVE_STATUSES.includes(inv.status) && inv.amountPaid > 0) {
             const date = new Date(inv.createdAt);
-            const key = `${date.getMonth() + 1}/${date.getFullYear()}`;
+            let key = '';
+
+            if (timeRange === 'week') {
+                key = date.toLocaleDateString('es-ES', { weekday: 'short' });
+            } else if (timeRange === 'month') {
+                key = date.getDate().toString();
+            } else if (timeRange === 'year') {
+                key = date.toLocaleDateString('es-ES', { month: 'short' });
+            } else {
+                key = `${date.getMonth() + 1}/${date.getFullYear()}`;
+            }
+            
             data[key] = (data[key] || 0) + (inv.amountPaid || 0);
         }
     });
+
     return Object.entries(data).map(([name, value]) => ({ name, value }));
-  }, [invoices]);
+  }, [filteredInvoices, timeRange]);
 
   const handleAiAnalysis = async () => {
     setLoadingAi(true);
     const clients = StorageService.getClients();
-    const validInvoices = invoices.filter(i => i.status !== InvoiceStatus.DRAFT);
+    const validInvoices = filteredInvoices.filter(i => i.status !== InvoiceStatus.DRAFT);
     const text = await GeminiService.analyzeFinancials(validInvoices, clients);
     setGeminiAnalysis(text);
     setLoadingAi(false);
   };
 
-  // --- Modal Handlers ---
+  // --- PDF Export Logic ---
+  const handlePrintReport = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
 
-  const openRateModal = () => {
-    setEditModal({ type: 'rate', value: (exchangeRate || 0).toString() });
+    const rangeLabels: Record<TimeRange, string> = {
+        week: 'Últimos 7 Días',
+        month: 'Mes Actual',
+        year: 'Año Actual',
+        all: 'Histórico Completo'
+    };
+
+    const html = `
+      <html>
+        <head>
+          <title>Reporte Financiero - VeneOrders</title>
+          <style>
+             body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #333; }
+             .header { text-align: center; margin-bottom: 40px; border-bottom: 2px solid #4f46e5; padding-bottom: 20px; }
+             .title { font-size: 28px; font-weight: bold; color: #4f46e5; }
+             .subtitle { font-size: 14px; color: #666; margin-top: 5px; }
+             .period { background: #f3f4f6; padding: 10px; text-align: center; font-weight: bold; border-radius: 8px; margin-bottom: 30px; }
+             .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 40px; }
+             .card { border: 1px solid #ddd; padding: 20px; border-radius: 8px; text-align: center; }
+             .card-title { font-size: 12px; text-transform: uppercase; color: #666; }
+             .card-value { font-size: 24px; font-weight: bold; margin-top: 5px; color: #111; }
+             .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #999; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="title">VeneOrders Manager</div>
+            <div class="subtitle">Reporte de Desempeño Financiero</div>
+          </div>
+
+          <div class="period">
+             Periodo: ${rangeLabels[timeRange]}
+             <br/>
+             <span style="font-size: 12px; font-weight: normal; color: #666">Generado el: ${new Date().toLocaleDateString()}</span>
+          </div>
+
+          <div class="grid">
+             <div class="card">
+                <div class="card-title">Dinero Recibido</div>
+                <div class="card-value">$${stats.revenue.toFixed(2)}</div>
+             </div>
+             <div class="card">
+                <div class="card-title">Gastos Operativos</div>
+                <div class="card-value" style="color: #dc2626;">-$${stats.totalExpenses.toFixed(2)}</div>
+             </div>
+             <div class="card">
+                <div class="card-title">Utilidad Neta Real</div>
+                <div class="card-value" style="color: ${stats.netProfit >= 0 ? '#10b981' : '#dc2626'};">$${stats.netProfit.toFixed(2)}</div>
+             </div>
+             <div class="card">
+                <div class="card-title">Margen de Ganancia</div>
+                <div class="card-value" style="color: ${stats.profitMargin > 15 ? '#10b981' : '#f59e0b'};">${stats.profitMargin.toFixed(1)}%</div>
+             </div>
+          </div>
+
+          <h3 style="border-bottom: 1px solid #eee; padding-bottom: 10px;">Resumen Ejecutivo</h3>
+          <p>
+            Durante el periodo <strong>${rangeLabels[timeRange]}</strong>, se generaron ingresos por ventas de <strong>$${stats.revenue.toFixed(2)}</strong>. 
+            Sin embargo, se incurrió en gastos operativos (materiales, servicios, etc.) por un total de <strong>$${stats.totalExpenses.toFixed(2)}</strong>.
+            <br/><br/>
+            Esto resulta en una <strong>Utilidad Neta Real de $${stats.netProfit.toFixed(2)}</strong>, lo que representa un margen del <strong>${stats.profitMargin.toFixed(1)}%</strong>.
+            <br/>
+            Queda pendiente por cobrar un total de <strong>$${stats.pending.toFixed(2)}</strong> de pedidos en curso.
+          </p>
+
+          <div class="footer">
+             Documento generado automáticamente por VeneOrders
+          </div>
+        </body>
+        <script>window.print();</script>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
   };
 
-  const openPriceModal = () => {
-    setEditModal({ type: 'price', value: (pricePerKg || 0).toString() });
-  };
-
+  // --- Modal Handlers --- (Same as before)
+  const openRateModal = () => setEditModal({ type: 'rate', value: (exchangeRate || 0).toString() });
+  const openPriceModal = () => setEditModal({ type: 'price', value: (pricePerKg || 0).toString() });
   const handleSaveSetting = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editModal) return;
-
-    // Flexible parsing for commas or dots
     const cleanVal = editModal.value.replace(',', '.');
     const num = parseFloat(cleanVal);
-
-    if (isNaN(num) || num < 0) {
-        alert("Por favor ingrese un número válido.");
-        return;
-    }
-
+    if (isNaN(num) || num < 0) { alert("Número inválido"); return; }
     setIsSavingSetting(true);
-    
     try {
-        if (editModal.type === 'rate') {
-            await StorageService.setExchangeRate(num);
-        } else {
-            await StorageService.setPricePerKg(num);
-        }
-        loadSettings(); 
+        if (editModal.type === 'rate') await StorageService.setExchangeRate(num);
+        else await StorageService.setPricePerKg(num);
+        loadData(); 
         setEditModal(null);
-    } catch (error) {
-        console.error("Error saving setting:", error);
-        alert("No se pudo guardar la configuración. Intente nuevamente.");
-    } finally {
-        setIsSavingSetting(false);
-    }
+    } catch (error) { console.error(error); alert("Error guardando"); } 
+    finally { setIsSavingSetting(false); }
   };
 
   return (
     <div className="space-y-6 relative">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
            <h2 className="text-2xl font-bold text-slate-800">Resumen Financiero</h2>
-           <p className="text-slate-500 text-sm">Finanzas basadas en pedidos Abonados, Pagados o Entregados</p>
+           <p className="text-slate-500 text-sm">Monitor de utilidad en tiempo real</p>
         </div>
         
-        {/* Settings Bar */}
-        <div className="flex flex-wrap gap-3">
+        {/* Actions Bar */}
+        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+             {/* Time Filters */}
+             <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm overflow-x-auto w-full lg:w-auto">
+                {(['week', 'month', 'year', 'all'] as TimeRange[]).map(r => (
+                    <button 
+                        key={r}
+                        onClick={() => setTimeRange(r)}
+                        className={`px-3 py-1 text-xs font-medium rounded-md capitalize transition-colors ${timeRange === r ? 'bg-indigo-100 text-indigo-700' : 'text-slate-500 hover:text-slate-800'}`}
+                    >
+                        {r === 'week' ? 'Semana' : r === 'month' ? 'Mes' : r === 'year' ? 'Año' : 'Todo'}
+                    </button>
+                ))}
+             </div>
+
+             <div className="h-6 w-px bg-slate-300 hidden lg:block"></div>
+             {/* Settings Indicators */}
              <div className="flex items-center gap-2 bg-white p-2 rounded-lg shadow-sm border border-slate-200">
                 <div className="flex flex-col">
-                    <span className="text-[10px] uppercase font-bold text-slate-400">Tasa Cambio</span>
-                    <span className="text-sm font-bold text-emerald-600">{(exchangeRate || 0).toFixed(2)} Bs</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Tasa</span>
+                    <span className="text-xs font-bold text-emerald-600">{(exchangeRate || 0).toFixed(2)} Bs</span>
                 </div>
-                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-500 hover:text-indigo-600" onClick={openRateModal}>
-                    <Settings size={16} />
+                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-400 hover:text-indigo-600" onClick={openRateModal}>
+                    <Settings size={14} />
                 </Button>
             </div>
-
             <div className="flex items-center gap-2 bg-white p-2 rounded-lg shadow-sm border border-slate-200">
                 <div className="flex flex-col">
-                    <span className="text-[10px] uppercase font-bold text-slate-400">Envío / Kg</span>
-                    <span className="text-sm font-bold text-indigo-600">${(pricePerKg || 0).toFixed(2)}</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Envío</span>
+                    <span className="text-xs font-bold text-indigo-600">${(pricePerKg || 0).toFixed(2)}</span>
                 </div>
-                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-slate-500 hover:text-indigo-600" onClick={openPriceModal}>
-                    <Settings size={16} />
+                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-400 hover:text-indigo-600" onClick={openPriceModal}>
+                    <Settings size={14} />
                 </Button>
             </div>
+            <div className="h-6 w-px bg-slate-300 hidden lg:block"></div>
+            <Button onClick={handlePrintReport} className="flex items-center gap-2">
+                <FileDown size={16} />
+                <span className="hidden sm:inline">Reporte PDF</span>
+            </Button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Dinero Recibido (USD)" value={`$${(stats.revenue || 0).toFixed(2)}`} icon={DollarSign} color="indigo" subtext="Solo Pagados/Abonados" />
-        <StatCard title="Ganancia Realizada (USD)" value={`$${(stats.netProfit || 0).toFixed(2)}`} icon={TrendingUp} color="emerald" subtext="Proporcional al pagado" />
-        <StatCard title="Deuda por Cobrar" value={`$${(stats.pending || 0).toFixed(2)}`} icon={AlertCircle} color="orange" subtext="Incluye pedidos pendientes" />
-        <StatCard title="Pedidos Activos" value={stats.count} icon={Package} color="blue" subtext="No incluye borradores" />
+        <StatCard title="Dinero Recibido" value={`$${(stats.revenue || 0).toFixed(2)}`} icon={DollarSign} color="indigo" subtext="Ingresos Brutos" />
+        <StatCard title="Egresos / Gastos" value={`-$${(stats.totalExpenses || 0).toFixed(2)}`} icon={TrendingDown} color="red" subtext="Materiales y Servicios" />
+        <StatCard title="Utilidad Neta Real" value={`$${(stats.netProfit || 0).toFixed(2)}`} icon={TrendingUp} color="emerald" subtext={`Margen: ${stats.profitMargin.toFixed(1)}%`} />
+        <StatCard title="Deuda por Cobrar" value={`$${(stats.pending || 0).toFixed(2)}`} icon={AlertCircle} color="orange" subtext="Pendiente global" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <h3 className="text-lg font-semibold mb-4 text-slate-800">Flujo de Ingresos (Mensual)</h3>
+          <h3 className="text-lg font-semibold mb-4 text-slate-800 flex items-center gap-2">
+            <Calendar size={18} className="text-slate-400"/>
+            Flujo de Ingresos (Bruto)
+            <span className="text-xs font-normal text-slate-500 ml-2 bg-slate-100 px-2 py-1 rounded-full capitalize">
+                {timeRange}
+            </span>
+          </h3>
           <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} />
-                <YAxis axisLine={false} tickLine={false} tickFormatter={(value) => `$${value}`} />
-                <Tooltip 
-                  cursor={{ fill: 'transparent' }}
-                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                   {chartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill="#4f46e5" />
-                    ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            {chartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12}} />
+                    <YAxis axisLine={false} tickLine={false} tickFormatter={(value) => `$${value}`} tick={{fontSize: 12}} />
+                    <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: '8px' }} />
+                    <Bar dataKey="value" fill="#4f46e5" radius={[4, 4, 0, 0]} />
+                </BarChart>
+                </ResponsiveContainer>
+            ) : (
+                <div className="h-full flex items-center justify-center text-slate-400 text-sm">
+                    No hay ingresos registrados en este periodo.
+                </div>
+            )}
           </div>
         </div>
 
@@ -222,48 +345,22 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Settings Modal */}
+      {/* Settings Modal (Same as before) */}
       {editModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm animate-in fade-in">
             <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                    <h3 className="font-bold text-slate-800">
-                        {editModal.type === 'rate' ? 'Actualizar Tasa (Bs/USD)' : 'Actualizar Precio Envío ($/Kg)'}
-                    </h3>
-                    <button onClick={() => setEditModal(null)} className="text-slate-400 hover:text-slate-600 transition-colors">
-                        <X size={20} />
-                    </button>
+                    <h3 className="font-bold text-slate-800">Actualizar Valor</h3>
+                    <button onClick={() => setEditModal(null)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
                 </div>
                 <form onSubmit={handleSaveSetting} className="p-6">
                     <div className="mb-6">
-                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                            {editModal.type === 'rate' ? 'Nueva Tasa del Día' : 'Nuevo Costo por Kg'}
-                        </label>
-                        <div className="relative">
-                            <input 
-                                type="text"
-                                inputMode="decimal" 
-                                className="w-full rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 border p-3 text-lg font-mono text-center"
-                                value={editModal.value}
-                                onChange={(e) => setEditModal({ ...editModal, value: e.target.value })}
-                                placeholder="0.00"
-                                autoFocus
-                            />
-                            <div className="absolute right-3 top-3 text-slate-400 text-sm font-medium pointer-events-none">
-                                {editModal.type === 'rate' ? 'Bs' : 'USD'}
-                            </div>
-                        </div>
-                        <p className="text-xs text-slate-400 mt-2 text-center">
-                            Puede usar punto (.) o coma (,) para decimales.
-                        </p>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Nuevo Valor</label>
+                        <input type="text" inputMode="decimal" className="w-full rounded-lg border-slate-300 shadow-sm border p-3 text-lg text-center" value={editModal.value} onChange={(e) => setEditModal({ ...editModal, value: e.target.value })} autoFocus />
                     </div>
                     <div className="flex justify-end gap-3">
-                        <Button type="button" variant="secondary" onClick={() => setEditModal(null)} disabled={isSavingSetting}>
-                            Cancelar
-                        </Button>
-                        <Button type="submit" isLoading={isSavingSetting}>
-                            Guardar Cambios
-                        </Button>
+                        <Button type="button" variant="secondary" onClick={() => setEditModal(null)} disabled={isSavingSetting}>Cancelar</Button>
+                        <Button type="submit" isLoading={isSavingSetting}>Guardar</Button>
                     </div>
                 </form>
             </div>
@@ -279,6 +376,7 @@ const StatCard = ({ title, value, icon: Icon, color, subtext }: any) => {
         emerald: 'bg-emerald-100 text-emerald-600',
         orange: 'bg-orange-100 text-orange-600',
         blue: 'bg-blue-100 text-blue-600',
+        red: 'bg-red-100 text-red-600',
     };
 
     return (

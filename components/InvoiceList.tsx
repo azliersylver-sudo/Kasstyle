@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Invoice, InvoiceStatus, Client } from '../types';
 import { StorageService } from '../services/storage';
 import { Button } from './Button';
-import { Edit, Trash2 } from 'lucide-react';
+import { Edit, Trash2, AlertTriangle } from 'lucide-react';
 import { InvoiceForm } from './InvoiceForm';
 import { InvoiceDetailModal } from './InvoiceDetailModal';
 
@@ -13,6 +13,9 @@ export const InvoiceList: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+
+  // Delete Confirmation State
+  const [invoiceToDelete, setInvoiceToDelete] = useState<string | null>(null);
 
   // Helper to get client name
   const getClientName = (id: string) => clients.find(c => c.id === id)?.name || 'Cliente desconocido';
@@ -30,10 +33,15 @@ export const InvoiceList: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  const handleDelete = (e: React.MouseEvent, id: string) => {
+  const handleDeleteClick = (e: React.MouseEvent, id: string) => {
     e.stopPropagation(); // Prevent triggering row clicks
-    if (confirm('¿Estás seguro de que quieres eliminar esta factura permanentemente? Esta acción se sincronizará con la hoja de cálculo.')) {
-      StorageService.deleteInvoice(id);
+    setInvoiceToDelete(id);
+  };
+
+  const confirmDelete = async () => {
+    if (invoiceToDelete) {
+        await StorageService.deleteInvoice(invoiceToDelete);
+        setInvoiceToDelete(null);
     }
   };
 
@@ -172,7 +180,7 @@ export const InvoiceList: React.FC = () => {
                                         <Edit size={16} />
                                     </button>
                                     <button 
-                                      onClick={(e) => handleDelete(e, inv.id)} 
+                                      onClick={(e) => handleDeleteClick(e, inv.id)} 
                                       className="p-2 text-red-600 hover:bg-red-100 rounded-full transition-colors"
                                       title="Eliminar"
                                     >
@@ -201,6 +209,32 @@ export const InvoiceList: React.FC = () => {
             client={getClient(selectedInvoice.clientId) || { id: '0', name: 'Desconocido', phone: '', address: '', email: '' }}
             onClose={() => setSelectedInvoice(null)} 
         />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {invoiceToDelete && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 transform transition-all scale-100">
+                <div className="flex flex-col items-center text-center">
+                    <div className="bg-red-100 p-3 rounded-full mb-4">
+                        <AlertTriangle className="h-8 w-8 text-red-600" />
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-900 mb-2">Eliminar Factura</h3>
+                    <p className="text-sm text-slate-500 mb-6">
+                        ¿Estás seguro de que quieres eliminar esta factura permanentemente? 
+                        <br/><span className="font-semibold text-red-500 text-xs">Esta acción se sincronizará con Google Sheets.</span>
+                    </p>
+                    <div className="flex gap-3 w-full">
+                        <Button variant="secondary" className="flex-1" onClick={() => setInvoiceToDelete(null)}>
+                            Cancelar
+                        </Button>
+                        <Button variant="danger" className="flex-1" onClick={confirmDelete}>
+                            Sí, Eliminar
+                        </Button>
+                    </div>
+                </div>
+            </div>
+        </div>
       )}
     </div>
   );

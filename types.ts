@@ -57,6 +57,14 @@ export interface Invoice {
   grandTotalUsd: number; // totalProductSale + logisticsCost (Commission is usually inside logistics or price)
 }
 
+export interface Expense {
+  id: string;
+  description: string;
+  amount: number;
+  category: 'Material' | 'Servicio' | 'Transporte' | 'Otro';
+  date: string; // ISO Date
+}
+
 // Helper interface for Dashboard data
 export interface FinancialStats {
   revenue: number;

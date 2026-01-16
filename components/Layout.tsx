@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, LayoutDashboard, FileText, Users, CloudOff, Cloud, RefreshCw } from 'lucide-react';
+import { Menu, X, LayoutDashboard, FileText, Users, CloudOff, Cloud, RefreshCw, Receipt } from 'lucide-react';
 import { StorageService } from '../services/storage';
 
 interface LayoutProps {
@@ -29,6 +29,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'invoices', label: 'Facturas', icon: FileText },
     { id: 'clients', label: 'Clientes', icon: Users },
+    { id: 'expenses', label: 'Gastos', icon: Receipt },
   ];
 
   const handleManualSync = () => {

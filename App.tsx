@@ -3,6 +3,7 @@ import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { InvoiceList } from './components/InvoiceList';
 import { ClientManager } from './components/ClientManager';
+import { ExpenseManager } from './components/ExpenseManager';
 import { StorageService } from './services/storage';
 
 const App: React.FC = () => {
@@ -36,6 +37,8 @@ const App: React.FC = () => {
         return <InvoiceList />;
       case 'clients':
         return <ClientManager />;
+      case 'expenses':
+        return <ExpenseManager />;
       default:
         return <Dashboard />;
     }
