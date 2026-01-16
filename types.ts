@@ -26,6 +26,7 @@ export interface ProductItem {
   originalPrice: number; // Cost from platform
   finalPrice: number; // Price sold to client (with/without discount)
   commission: number; // Hidden fee
+  isElectronics?: boolean; // New field for 20% tax calculation
 }
 
 export interface Client {
@@ -45,7 +46,7 @@ export interface Invoice {
   status: InvoiceStatus;
   exchangeRate: number; // Bs per USD
   items: ProductItem[];
-  logisticsCost: number; // Shipping fee
+  logisticsCost: number; // Shipping fee (Weight cost + Electronics tax)
   
   // Payment tracking
   amountPaid: number; // New field for partial payments

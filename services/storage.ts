@@ -130,7 +130,8 @@ export const StorageService = {
              originalPrice: safeParseFloat(item.originalPrice),
              finalPrice: safeParseFloat(item.finalPrice),
              commission: safeParseFloat(item.commission),
-             weightUnit: item.weightUnit || 'lb'
+             weightUnit: item.weightUnit || 'lb',
+             isElectronics: !!item.isElectronics // Ensure boolean
          }));
 
          const logisticsCost = safeParseFloat(inv.logisticsCost);

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Invoice, InvoiceStatus, ProductItem, Platform, Client } from '../types';
 import { StorageService } from '../services/storage';
 import { Button } from './Button';
-import { Trash2, Plus, ArrowLeft, Wand2, Calculator, Percent, Settings } from 'lucide-react';
+import { Trash2, Plus, ArrowLeft, Wand2, Calculator, Percent, Settings, Zap } from 'lucide-react';
 import { GeminiService } from '../services/geminiService';
 
 interface InvoiceFormProps {
@@ -49,17 +49,11 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
         
         // CRITICAL: Load saved cost OR Self-Heal if 0
         let loadedCost = inv.logisticsCost !== undefined ? inv.logisticsCost : 0;
+        
+        // If cost is 0, try to recalculate based on loaded items to be helpful
         if (loadedCost === 0 && loadedItems.length > 0) {
-             const totalKg = loadedItems.reduce((acc, item) => {
-                const itemWeight = item.weight || 0;
-                const itemQty = item.quantity || 0;
-                const weightInKg = item.weightUnit === 'lb' ? (itemWeight / 2.20462) : itemWeight;
-                return acc + (weightInKg * itemQty);
-            }, 0);
-            
-            if (totalKg > 0) {
-                loadedCost = parseFloat((totalKg * currentPricePerKg).toFixed(2));
-            }
+            const result = calculateSuggestedLogistics(loadedItems, currentPricePerKg);
+            if (result.cost > 0) loadedCost = result.cost;
         }
         setLogisticsCost(loadedCost);
         
@@ -81,7 +75,8 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
   }, [invoiceId]);
 
   // Calculation Logic
-  const calculateSuggestedLogistics = (currentItems: ProductItem[]) => {
+  const calculateSuggestedLogistics = (currentItems: ProductItem[], priceKg: number) => {
+    // 1. Calculate Weight Cost
     const totalKg = currentItems.reduce((acc, item) => {
         const itemWeight = item.weight || 0;
         const itemQty = item.quantity || 0;
@@ -89,16 +84,29 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
         return acc + (weightInKg * itemQty);
     }, 0);
 
-    const pricePerKg = configPricePerKg;
+    const weightCost = totalKg * priceKg;
+
+    // 2. Calculate Electronics Tax (20% of Original Price for each electronic item)
+    const electronicsTax = currentItems.reduce((acc, item) => {
+        if (item.isElectronics) {
+            return acc + ((item.originalPrice || 0) * (item.quantity || 0) * 0.20);
+        }
+        return acc;
+    }, 0);
+
+    const totalCost = weightCost + electronicsTax;
+
     return {
-        cost: parseFloat((totalKg * pricePerKg).toFixed(2)),
-        totalWeight: parseFloat(totalKg.toFixed(2))
+        cost: parseFloat(totalCost.toFixed(2)),
+        totalWeight: parseFloat(totalKg.toFixed(2)),
+        weightCost: parseFloat(weightCost.toFixed(2)),
+        electronicsTax: parseFloat(electronicsTax.toFixed(2))
     };
   };
 
   useEffect(() => {
      if (!isLoadedRef.current && invoiceId) return;
-     const result = calculateSuggestedLogistics(items);
+     const result = calculateSuggestedLogistics(items, configPricePerKg);
      setLogisticsCost(result.cost);
   }, [items, configPricePerKg]);
 
@@ -113,6 +121,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
       originalPrice: 0,
       finalPrice: 0,
       commission: 0,
+      isElectronics: false
     };
     const newItems = [...items, newItem];
     setItems(newItems);
@@ -216,7 +225,9 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
   const grandTotalBs = grandTotalUSD * (exchangeRate || 0);
   
   const estimatedProfit = items.reduce((acc, i) => acc + (((i.finalPrice || 0) - (i.originalPrice || 0)) + (i.commission || 0)) * (i.quantity || 0), 0);
-  const currentTotalWeight = calculateSuggestedLogistics(items).totalWeight;
+  
+  // Logistics Breakdown
+  const logisticsBreakdown = calculateSuggestedLogistics(items, configPricePerKg);
 
   // Payment Stats
   const remainingBalance = Math.max(0, grandTotalUSD - amountPaid);
@@ -254,7 +265,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
       </div>
 
       <div className="p-6 overflow-y-auto flex-1">
-        {/* Main Info - REMOVED EXCHANGE RATE INPUT FROM HERE */}
+        {/* Main Info */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
             <div className="lg:col-span-2">
                 <label className="block text-sm font-medium text-slate-700 mb-1">Cliente</label>
@@ -288,7 +299,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
             
             <div className="space-y-4">
                 {items.map((item, index) => (
-                    <div key={item.id} className="bg-slate-50 p-4 rounded-lg border border-slate-200 relative group">
+                    <div key={item.id} className="bg-slate-50 p-4 rounded-lg border border-slate-200 relative group transition-all hover:shadow-md hover:border-indigo-200">
                         <button 
                             onClick={() => removeItem(item.id)} 
                             className="absolute top-2 right-2 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -345,7 +356,22 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                                     onChange={e => updateItem(item.id, 'quantity', parseInt(e.target.value))}
                                 />
                             </div>
-                            <div className="md:col-span-3"></div> {/* Spacer row break */}
+                            
+                            {/* Electronic Toggle */}
+                            <div className="md:col-span-3 flex items-end">
+                                <label className={`flex items-center space-x-2 text-sm cursor-pointer p-1 rounded-md border w-full justify-center transition-colors ${item.isElectronics ? 'bg-yellow-50 border-yellow-200 text-yellow-800' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-100'}`}>
+                                    <input 
+                                        type="checkbox" 
+                                        className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                                        checked={item.isElectronics || false}
+                                        onChange={e => updateItem(item.id, 'isElectronics', e.target.checked)}
+                                    />
+                                    <div className="flex items-center">
+                                        <Zap size={14} className={`mr-1 ${item.isElectronics ? 'fill-yellow-500 text-yellow-500' : ''}`} />
+                                        <span>Electrónico (+20%)</span>
+                                    </div>
+                                </label>
+                            </div>
 
                             {/* Financials (Row 2) */}
                             <div className="md:col-span-2">
@@ -423,19 +449,24 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                         <span className="text-slate-500">Subtotal Productos:</span>
                         <span className="font-medium">${totalProductsUSD.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex justify-between items-start">
                          <div className="text-slate-500 flex flex-col">
-                            <span className="flex items-center gap-1">
-                                Costo Logística (${configPricePerKg}/kg)
+                            <span className="flex items-center gap-1 font-semibold text-slate-700">
+                                Costo Logística Total
                             </span>
-                            <span className="text-xs text-slate-400">Total Peso: {currentTotalWeight} kg</span>
+                            <span className="text-xs text-slate-400">Peso: {logisticsBreakdown.totalWeight}kg x ${configPricePerKg} = ${logisticsBreakdown.weightCost}</span>
+                            {logisticsBreakdown.electronicsTax > 0 && (
+                                <span className="text-xs text-yellow-600 flex items-center mt-0.5">
+                                    <Zap size={10} className="mr-1"/> Arancel Electrónica: ${logisticsBreakdown.electronicsTax}
+                                </span>
+                            )}
                          </div>
                          <div className="flex items-center">
                             <input 
                                 type="number" 
-                                className="w-24 text-right p-1 border rounded text-xs bg-slate-200 text-slate-500 cursor-not-allowed font-semibold" 
+                                className="w-24 text-right p-1 border rounded text-xs bg-slate-200 text-slate-700 font-bold" 
                                 value={logisticsCost}
-                                readOnly
+                                readOnly // Normally auto-calculated, user can adjust weight/tax to change
                             />
                          </div>
                     </div>
