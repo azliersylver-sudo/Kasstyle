@@ -2,10 +2,7 @@ import React, { useState } from 'react';
 import { Invoice, Client, InvoiceStatus } from '../types';
 import { Button } from './Button';
 import { StorageService } from '../services/storage';
-import { X, Printer, ArrowRightLeft, ArrowLeftRight, Download, Loader2 } from 'lucide-react';
-
-// Declare global html2pdf loaded via script tag
-declare var html2pdf: any;
+import { X, ArrowRightLeft, ArrowLeftRight, Printer } from 'lucide-react';
 
 interface InvoiceDetailModalProps {
   invoice: Invoice;
@@ -16,7 +13,6 @@ interface InvoiceDetailModalProps {
 export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice, client, onClose }) => {
   const [currency, setCurrency] = useState<'USD' | 'Bs'>('USD');
   const [isSwapped, setIsSwapped] = useState(false); 
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   // Calculate logic locally
   const subTotalProducts = (invoice.items || []).reduce((acc, item) => acc + ((item.finalPrice || 0) * (item.quantity || 0)), 0);
@@ -54,82 +50,78 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
       setIsSwapped(!isSwapped);
   };
 
-  const handleDownloadPDF = async () => {
-    setIsGeneratingPdf(true);
-    
-    // Safety check for items
+  const handlePrint = () => {
     const safeItems = invoice.items || [];
-    
-    // Obtener precio por Kg actual para el desglose (fallback)
     const pricePerKg = StorageService.getPricePerKg();
 
+    // Construcción de filas con estilos inline robustos para impresión
     const itemsHtml = safeItems.map(item => {
-      // Cálculo de logística unitaria para visualización en tabla
       const weightKg = item.weightUnit === 'lb' ? (item.weight / 2.20462) : item.weight;
       const elecTax = item.isElectronics ? (item.originalPrice * 0.20) : 0;
       const baseLogistics = weightKg * pricePerKg;
-      
-      // Logística + Comisión Unitaria (Calculo interno mantenido)
       const unitAddons = baseLogistics + elecTax + item.commission;
-      
-      // Total de la línea (Precio Venta + Logística Completa) * Cantidad
       const unitFullPrice = item.finalPrice + unitAddons;
       const rowTotal = unitFullPrice * item.quantity;
 
       return `
-      <tr style="border-bottom: 1px solid #eee;">
-        <td style="padding: 8px;">
-            <div style="font-weight: bold; font-size: 13px;">${item.name}</div>
-            <div style="font-size: 10px; color: #666;">
+      <tr style="border-bottom: 1px solid #e2e8f0; page-break-inside: avoid;">
+        <td style="padding: 10px; vertical-align: top;">
+            <div style="font-weight: bold; font-size: 13px; color: #1e293b;">${item.name}</div>
+            <div style="font-size: 11px; color: #64748b;">
                ${item.platform} 
                ${item.isElectronics ? ' • Elec(+20%)' : ''}
+               ${item.trackingNumber ? `• Tracking: ${item.trackingNumber}` : ''}
             </div>
         </td>
-        <td style="padding: 8px; text-align: center;">${item.quantity}</td>
-        <td style="padding: 8px; text-align: right;">${formatBody(item.finalPrice)}</td>
-        <td style="padding: 8px; text-align: right; color: #666;">${formatBody(unitAddons)}</td>
-        <td style="padding: 8px; text-align: right; font-weight: bold;">${formatBody(rowTotal)}</td>
+        <td style="padding: 10px; text-align: center; vertical-align: top; color: #334155;">${item.quantity}</td>
+        <td style="padding: 10px; text-align: right; vertical-align: top; color: #334155;">${formatBody(item.finalPrice)}</td>
+        <td style="padding: 10px; text-align: right; vertical-align: top; color: #64748b;">${formatBody(unitAddons)}</td>
+        <td style="padding: 10px; text-align: right; font-weight: bold; vertical-align: top; color: #0f172a;">${formatBody(rowTotal)}</td>
       </tr>
     `}).join('');
 
-    // Payment Section for Print
     const paidStr = formatBody(paidAmount);
     const remainingStr = formatRemaining(remainingBalanceUSD);
 
-    // Contenido HTML optimizado para html2pdf
-    // Usamos estilos inline estrictos para asegurar que el canvas capture todo correctamente
-    const content = `
-       <div id="invoice-pdf-template" style="width: 800px; padding: 40px; background: white; font-family: 'Helvetica', sans-serif; color: #333;">
+    // Template del cuerpo de la factura
+    // NOTA: Usamos una clase 'invoice-container' en lugar de estilos inline fijos para el wrapper principal
+    const invoiceBody = `
+       <div class="invoice-container">
           
+          <!-- Header -->
           <div style="display: flex; justify-content: space-between; border-bottom: 3px solid #3e136b; padding-bottom: 20px; margin-bottom: 30px;">
             <div>
-              <div style="font-size: 32px; font-weight: 900; color: #3e136b; letter-spacing: -1px;">KASSTYLE</div>
-              <div style="font-size: 14px; color: #64748b; margin-top: 5px;">Logística & Importación</div>
+              <div style="font-size: 34px; font-weight: 900; color: #3e136b; letter-spacing: -1px; line-height: 1;">KASSTYLE</div>
+              <div style="font-size: 13px; color: #64748b; font-weight: 500; margin-top: 4px;">Logística & Importación</div>
             </div>
             <div style="text-align: right;">
-              <div style="font-size: 18px; font-weight: bold; color: #333;">FACTURA #${invoice.id.slice(0, 8).toUpperCase()}</div>
-              <div style="font-size: 14px; color: #666; margin-top: 5px;">${new Date(invoice.createdAt).toLocaleDateString()}</div>
-              <div style="margin-top: 5px;">
-                <span style="background: #f1f5f9; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; text-transform: uppercase;">${invoice.status}</span>
+              <div style="font-size: 16px; font-weight: bold; color: #1e293b;">FACTURA #${invoice.id.slice(0, 8).toUpperCase()}</div>
+              <div style="font-size: 13px; color: #64748b; margin-top: 4px;">Fecha: ${new Date(invoice.createdAt).toLocaleDateString()}</div>
+              <div style="margin-top: 6px;">
+                <span style="background: #f1f5f9; color: #334155; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; text-transform: uppercase; border: 1px solid #e2e8f0;">
+                    ${invoice.status}
+                </span>
               </div>
             </div>
           </div>
 
-          <div style="margin-bottom: 30px; background: #f8fafc; padding: 20px; border-radius: 8px; border-left: 4px solid #3e136b;">
-            <div style="font-size: 12px; color: #64748b; margin-bottom: 4px; text-transform: uppercase; font-weight: bold;">Cliente</div>
-            <div style="font-size: 16px; font-weight: bold; color: #333;">${client.name}</div>
-            <div style="font-size: 14px; color: #555;">${client.phone}</div>
-            <div style="font-size: 14px; color: #555;">${client.address || ''}</div>
+          <!-- Info Cliente -->
+          <div style="margin-bottom: 30px; background: #f8fafc; padding: 20px; border-radius: 8px; border-left: 4px solid #3e136b; page-break-inside: avoid;">
+            <div style="font-size: 11px; color: #64748b; margin-bottom: 4px; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px;">Cliente</div>
+            <div style="font-size: 18px; font-weight: bold; color: #1e293b; margin-bottom: 2px;">${client.name}</div>
+            <div style="font-size: 14px; color: #475569;">${client.phone}</div>
+            <div style="font-size: 14px; color: #475569;">${client.address || ''}</div>
           </div>
 
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+          <!-- Tabla -->
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 13px;">
             <thead>
               <tr style="background: #f1f5f9;">
-                <th style="padding: 12px; text-align: left; font-size: 12px; text-transform: uppercase; color: #64748b; border-bottom: 2px solid #e2e8f0;">Item</th>
-                <th style="padding: 12px; text-align: center; font-size: 12px; text-transform: uppercase; color: #64748b; border-bottom: 2px solid #e2e8f0;">Cant.</th>
-                <th style="padding: 12px; text-align: right; font-size: 12px; text-transform: uppercase; color: #64748b; border-bottom: 2px solid #e2e8f0;">Precio</th>
-                <th style="padding: 12px; text-align: right; font-size: 12px; text-transform: uppercase; color: #64748b; border-bottom: 2px solid #e2e8f0;">Envío+</th>
-                <th style="padding: 12px; text-align: right; font-size: 12px; text-transform: uppercase; color: #64748b; border-bottom: 2px solid #e2e8f0;">Total</th>
+                <th style="padding: 12px 10px; text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 700; color: #475569; border-bottom: 2px solid #cbd5e1;">Descripción</th>
+                <th style="padding: 12px 10px; text-align: center; font-size: 11px; text-transform: uppercase; font-weight: 700; color: #475569; border-bottom: 2px solid #cbd5e1;">Cant.</th>
+                <th style="padding: 12px 10px; text-align: right; font-size: 11px; text-transform: uppercase; font-weight: 700; color: #475569; border-bottom: 2px solid #cbd5e1;">Precio</th>
+                <th style="padding: 12px 10px; text-align: right; font-size: 11px; text-transform: uppercase; font-weight: 700; color: #475569; border-bottom: 2px solid #cbd5e1;">Envío/Imp</th>
+                <th style="padding: 12px 10px; text-align: right; font-size: 11px; text-transform: uppercase; font-weight: 700; color: #475569; border-bottom: 2px solid #cbd5e1;">Total</th>
               </tr>
             </thead>
             <tbody>
@@ -137,17 +129,18 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
             </tbody>
           </table>
 
-          <div style="display: flex; justify-content: flex-end;">
-            <div style="width: 300px;">
-              <div style="display: flex; justify-content: space-between; padding: 10px 0; border-top: 2px solid #3e136b; margin-top: 10px;">
-                <span style="font-size: 16px; font-weight: bold; color: #3e136b;">TOTAL (${currencySymbolBody}):</span>
-                <span style="font-size: 18px; font-weight: bold; color: #3e136b;">${formatBody(grandTotal)}</span>
+          <!-- Totales -->
+          <div style="display: flex; justify-content: flex-end; page-break-inside: avoid;">
+            <div style="width: 280px;">
+              <div style="display: flex; justify-content: space-between; padding: 12px 0; border-top: 2px solid #3e136b; margin-top: 10px;">
+                <span style="font-size: 16px; font-weight: 800; color: #3e136b;">TOTAL (${currencySymbolBody}):</span>
+                <span style="font-size: 18px; font-weight: 800; color: #3e136b;">${formatBody(grandTotal)}</span>
               </div>
               
-              <div style="border-top: 1px dashed #cbd5e1; margin-top: 10px; padding-top: 10px;">
-                  <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 14px;">
+              <div style="border-top: 1px dashed #cbd5e1; margin-top: 5px; padding-top: 15px;">
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; color: #475569;">
                       <span>Abonado:</span>
-                      <span>${paidStr}</span>
+                      <span style="font-weight: 600;">${paidStr}</span>
                   </div>
                   <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: bold; color: ${remainingBalanceUSD <= 0 ? '#10b981' : '#f59e0b'};">
                       <span>Restante:</span>
@@ -157,43 +150,88 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
             </div>
           </div>
 
-          <div style="margin-top: 60px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 20px;">
-            <p>Gracias por su confianza.</p>
+          <!-- Footer -->
+          <div style="margin-top: 60px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 25px; page-break-inside: avoid;">
+            <p style="font-weight: 500;">Gracias por confiar en nuestros servicios.</p>
             <p style="margin-top: 5px;">KASSTYLE - Gestión de Logística e Importación</p>
           </div>
        </div>
     `;
 
-    // Crear un contenedor temporal fuera de la vista
-    const element = document.createElement('div');
-    element.innerHTML = content;
-    element.style.position = 'fixed';
-    element.style.left = '-9999px';
-    element.style.top = '0';
-    document.body.appendChild(element);
-
-    const opt = {
-      margin:       10,
-      filename:     `Factura_${invoice.id.slice(0, 6)}.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2, useCORS: true, letterRendering: true }, 
-      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
-
-    try {
-        if (typeof html2pdf === 'undefined') {
-            throw new Error("La librería de PDF no se ha cargado. Por favor recarga la página.");
-        }
-        await html2pdf().set(opt).from(element).save();
-    } catch (error) {
-        console.error("Error generando PDF", error);
-        alert(`Error: ${error instanceof Error ? error.message : 'Error desconocido al generar PDF'}`);
-    } finally {
-        if (document.body.contains(element)) {
-            document.body.removeChild(element);
-        }
-        setIsGeneratingPdf(false);
+    // --- LÓGICA DE VENTANA NUEVA ---
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+        alert("Por favor permite las ventanas emergentes para ver la factura.");
+        return;
     }
+
+    const fullDocument = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Factura ${invoice.id.slice(0, 8)} - KASSTYLE</title>
+          <style>
+            /* Reset Global y Box Sizing para evitar cálculos erróneos de ancho */
+            * { box-sizing: border-box; }
+            body { margin: 0; padding: 0; background-color: #f3f4f6; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+            
+            .invoice-container {
+                background: white;
+                margin: 0 auto;
+            }
+
+            /* Estilos para Pantalla (Vista Previa en la nueva pestaña) */
+            @media screen {
+               body { padding: 40px 0; display: flex; justify-content: center; }
+               .invoice-container { 
+                  width: 800px; 
+                  padding: 40px;
+                  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); 
+                  border-radius: 4px;
+               }
+            }
+
+            /* Estilos para Impresión / Guardar PDF */
+            @media print {
+              /* Configuramos la página y los márgenes seguros (12mm es estándar y seguro) */
+              @page { size: A4; margin: 12mm; }
+              
+              body { 
+                 background-color: white; 
+                 -webkit-print-color-adjust: exact; 
+                 print-color-adjust: exact;
+              }
+              
+              /* El contenedor se adapta al ancho de la hoja restando los márgenes del @page */
+              .invoice-container {
+                 width: 100% !important;
+                 max-width: none !important;
+                 padding: 0 !important;
+                 margin: 0 !important;
+                 box-shadow: none !important;
+                 border: none !important;
+              }
+
+              /* Aseguramos que las tablas no se salgan */
+              table { width: 100% !important; }
+            }
+          </style>
+        </head>
+        <body>
+          ${invoiceBody}
+          <script>
+             window.onload = function() {
+                setTimeout(() => {
+                    window.print();
+                }, 500);
+             }
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(fullDocument);
+    printWindow.document.close(); 
   };
 
   return (
@@ -230,26 +268,16 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
                  </Button>
                  <Button 
                     size="sm" 
-                    onClick={handleDownloadPDF} 
-                    disabled={isGeneratingPdf}
+                    onClick={handlePrint} 
                     className="bg-brand hover:bg-brand-light text-white shadow-md shadow-brand/20 min-w-[140px]"
                  >
-                    {isGeneratingPdf ? (
-                        <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Generando...
-                        </>
-                    ) : (
-                        <>
-                            <Download className="w-4 h-4 mr-2" />
-                            Descargar PDF
-                        </>
-                    )}
+                    <Printer className="w-4 h-4 mr-2" />
+                    Imprimir / PDF
                  </Button>
              </div>
           </div>
 
-          {/* Products Table (On Screen - Keeping original simplified view for UI) */}
+          {/* Products Table (On Screen View) */}
           <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden mb-6">
             <table className="w-full text-sm">
                 <thead className="bg-slate-50 border-b border-slate-200">
