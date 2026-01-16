@@ -63,7 +63,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
       const elecTax = item.isElectronics ? (item.originalPrice * 0.20) : 0;
       const baseLogistics = weightKg * pricePerKg;
       
-      // Logística + Comisión Unitaria
+      // Logística + Comisión Unitaria (Calculo interno mantenido)
       const unitAddons = baseLogistics + elecTax + item.commission;
       
       // Total de la línea (Precio Venta + Logística Completa) * Cantidad
@@ -94,7 +94,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
           <style>
             body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #333; }
             .header { display: flex; justify-content: space-between; margin-bottom: 40px; border-bottom: 2px solid #333; padding-bottom: 20px; }
-            .title { font-size: 24px; font-weight: bold; text-transform: uppercase; color: #4f46e5; }
+            .title { font-size: 24px; font-weight: bold; text-transform: uppercase; color: #3e136b; }
             .meta { text-align: right; font-size: 14px; }
             .client-info { margin-bottom: 30px; }
             table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
@@ -109,7 +109,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
         <body>
           <div class="header">
             <div>
-              <div class="title">VeneOrders</div>
+              <div class="title">KASSTYLE</div>
               <div style="font-size: 12px; margin-top: 5px;">Servicio de Importación Internacional</div>
             </div>
             <div class="meta">
@@ -132,7 +132,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
                 <th width="40%">Descripción</th>
                 <th width="10%" style="text-align: center;">Cant.</th>
                 <th width="15%" style="text-align: right;">Precio Unit.</th>
-                <th width="15%" style="text-align: right;">Logística (+Com)</th>
+                <th width="15%" style="text-align: right;">Envío</th>
                 <th width="20%" style="text-align: right;">TOTAL</th>
               </tr>
             </thead>
@@ -257,7 +257,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
                 <div className="border-t border-slate-100 pt-3 flex justify-between items-center">
                     <div>
                         <span className="block text-xs text-slate-400">Total General</span>
-                        <span className="font-bold text-xl text-indigo-700">{formatBody(grandTotal)}</span>
+                        <span className="font-bold text-xl text-brand">{formatBody(grandTotal)}</span>
                     </div>
                 </div>
 
@@ -274,7 +274,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
                             {isBsContext && remainingBalanceUSD > 0 && (
                                 <button 
                                     onClick={toggleSwap}
-                                    className={`p-1 rounded-full transition-colors ${isSwapped ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                                    className={`p-1 rounded-full transition-colors ${isSwapped ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
                                     title="Intercambiar: Restante en Bs / Resto en $"
                                 >
                                     <ArrowLeftRight size={14} />
@@ -289,7 +289,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
                 
                 {isBsContext && (
                     <div 
-                        className="mt-2 text-center text-xs text-slate-400 italic cursor-pointer hover:text-indigo-400 transition-colors"
+                        className="mt-2 text-center text-xs text-slate-400 italic cursor-pointer hover:text-brand transition-colors"
                         onClick={toggleSwap}
                     >
                         {isSwapped 

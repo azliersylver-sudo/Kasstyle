@@ -154,11 +154,11 @@ export const Dashboard: React.FC = () => {
     const html = `
       <html>
         <head>
-          <title>Reporte Financiero - VeneOrders</title>
+          <title>Reporte Financiero - KASSTYLE</title>
           <style>
              body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #333; }
-             .header { text-align: center; margin-bottom: 40px; border-bottom: 2px solid #4f46e5; padding-bottom: 20px; }
-             .title { font-size: 28px; font-weight: bold; color: #4f46e5; }
+             .header { text-align: center; margin-bottom: 40px; border-bottom: 2px solid #3e136b; padding-bottom: 20px; }
+             .title { font-size: 28px; font-weight: bold; color: #3e136b; }
              .subtitle { font-size: 14px; color: #666; margin-top: 5px; }
              .period { background: #f3f4f6; padding: 10px; text-align: center; font-weight: bold; border-radius: 8px; margin-bottom: 30px; }
              .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 40px; }
@@ -170,7 +170,7 @@ export const Dashboard: React.FC = () => {
         </head>
         <body>
           <div class="header">
-            <div class="title">VeneOrders Manager</div>
+            <div class="title">KASSTYLE Manager</div>
             <div class="subtitle">Reporte de Desempeño Financiero</div>
           </div>
 
@@ -210,7 +210,7 @@ export const Dashboard: React.FC = () => {
           </p>
 
           <div class="footer">
-             Documento generado automáticamente por VeneOrders
+             Documento generado automáticamente por KASSTYLE
           </div>
         </body>
         <script>window.print();</script>
@@ -255,7 +255,7 @@ export const Dashboard: React.FC = () => {
                     <button 
                         key={r}
                         onClick={() => setTimeRange(r)}
-                        className={`px-3 py-1 text-xs font-medium rounded-md capitalize transition-colors ${timeRange === r ? 'bg-indigo-100 text-indigo-700' : 'text-slate-500 hover:text-slate-800'}`}
+                        className={`px-3 py-1 text-xs font-medium rounded-md capitalize transition-colors ${timeRange === r ? 'bg-purple-100 text-purple-700' : 'text-slate-500 hover:text-slate-800'}`}
                     >
                         {r === 'week' ? 'Semana' : r === 'month' ? 'Mes' : r === 'year' ? 'Año' : 'Todo'}
                     </button>
@@ -269,16 +269,16 @@ export const Dashboard: React.FC = () => {
                     <span className="text-[10px] uppercase font-bold text-slate-400">Tasa</span>
                     <span className="text-xs font-bold text-emerald-600">{(exchangeRate || 0).toFixed(2)} Bs</span>
                 </div>
-                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-400 hover:text-indigo-600" onClick={openRateModal}>
+                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-400 hover:text-brand" onClick={openRateModal}>
                     <Settings size={14} />
                 </Button>
             </div>
             <div className="flex items-center gap-2 bg-white p-2 rounded-lg shadow-sm border border-slate-200">
                 <div className="flex flex-col">
                     <span className="text-[10px] uppercase font-bold text-slate-400">Envío</span>
-                    <span className="text-xs font-bold text-indigo-600">${(pricePerKg || 0).toFixed(2)}</span>
+                    <span className="text-xs font-bold text-brand">${(pricePerKg || 0).toFixed(2)}</span>
                 </div>
-                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-400 hover:text-indigo-600" onClick={openPriceModal}>
+                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-slate-400 hover:text-brand" onClick={openPriceModal}>
                     <Settings size={14} />
                 </Button>
             </div>
@@ -291,7 +291,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Dinero Recibido" value={`$${(stats.revenue || 0).toFixed(2)}`} icon={DollarSign} color="indigo" subtext="Ingresos Brutos" />
+        <StatCard title="Dinero Recibido" value={`$${(stats.revenue || 0).toFixed(2)}`} icon={DollarSign} color="purple" subtext="Ingresos Brutos" />
         <StatCard title="Egresos / Gastos" value={`-$${(stats.totalExpenses || 0).toFixed(2)}`} icon={TrendingDown} color="red" subtext="Materiales y Servicios" />
         <StatCard title="Utilidad Neta Real" value={`$${(stats.netProfit || 0).toFixed(2)}`} icon={TrendingUp} color="emerald" subtext={`Margen: ${stats.profitMargin.toFixed(1)}%`} />
         <StatCard title="Deuda por Cobrar" value={`$${(stats.pending || 0).toFixed(2)}`} icon={AlertCircle} color="orange" subtext="Pendiente global" />
@@ -314,7 +314,7 @@ export const Dashboard: React.FC = () => {
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12}} />
                     <YAxis axisLine={false} tickLine={false} tickFormatter={(value) => `$${value}`} tick={{fontSize: 12}} />
                     <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: '8px' }} />
-                    <Bar dataKey="value" fill="#4f46e5" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="value" fill="#3e136b" radius={[4, 4, 0, 0]} />
                 </BarChart>
                 </ResponsiveContainer>
             ) : (
@@ -328,7 +328,7 @@ export const Dashboard: React.FC = () => {
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col">
           <div className="flex justify-between items-center mb-4">
              <h3 className="text-lg font-semibold text-slate-800">Asistente Gemini</h3>
-             <Sparkles className="text-indigo-500 h-5 w-5" />
+             <Sparkles className="text-purple-500 h-5 w-5" />
           </div>
           <div className="flex-1 bg-slate-50 rounded-lg p-4 text-sm text-slate-600 overflow-y-auto max-h-64">
             {geminiAnalysis ? (
@@ -356,7 +356,7 @@ export const Dashboard: React.FC = () => {
                 <form onSubmit={handleSaveSetting} className="p-6">
                     <div className="mb-6">
                         <label className="block text-sm font-medium text-slate-700 mb-2">Nuevo Valor</label>
-                        <input type="text" inputMode="decimal" className="w-full rounded-lg border-slate-300 shadow-sm border p-3 text-lg text-center" value={editModal.value} onChange={(e) => setEditModal({ ...editModal, value: e.target.value })} autoFocus />
+                        <input type="text" inputMode="decimal" className="w-full rounded-lg border-slate-300 shadow-sm border p-3 text-lg text-center focus:ring-brand focus:border-brand" value={editModal.value} onChange={(e) => setEditModal({ ...editModal, value: e.target.value })} autoFocus />
                     </div>
                     <div className="flex justify-end gap-3">
                         <Button type="button" variant="secondary" onClick={() => setEditModal(null)} disabled={isSavingSetting}>Cancelar</Button>
@@ -372,7 +372,7 @@ export const Dashboard: React.FC = () => {
 
 const StatCard = ({ title, value, icon: Icon, color, subtext }: any) => {
     const colors: any = {
-        indigo: 'bg-indigo-100 text-indigo-600',
+        purple: 'bg-purple-100 text-purple-600',
         emerald: 'bg-emerald-100 text-emerald-600',
         orange: 'bg-orange-100 text-orange-600',
         blue: 'bg-blue-100 text-blue-600',

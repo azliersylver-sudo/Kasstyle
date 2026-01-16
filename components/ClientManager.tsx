@@ -84,7 +84,7 @@ export const ClientManager: React.FC = () => {
           <input 
             type="text" 
             placeholder="Buscar por nombre o teléfono..."
-            className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand focus:border-brand"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -105,7 +105,7 @@ export const ClientManager: React.FC = () => {
                 </p>
               </div>
               <div className="flex space-x-2">
-                <button onClick={() => handleOpenModal(client)} className="p-1 text-indigo-600 hover:bg-indigo-50 rounded">
+                <button onClick={() => handleOpenModal(client)} className="p-1 text-brand hover:bg-purple-50 rounded">
                   <Edit2 size={16} />
                 </button>
                 <button onClick={() => handleDelete(client.id)} className="p-1 text-red-600 hover:bg-red-50 rounded">
@@ -127,7 +127,7 @@ export const ClientManager: React.FC = () => {
                 <label className="block text-sm font-medium text-slate-700">Nombre Completo</label>
                 <input 
                   required
-                  className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 border p-2"
+                  className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-brand focus:ring-brand border p-2"
                   value={formData.name || ''}
                   onChange={e => setFormData({...formData, name: e.target.value})}
                 />
@@ -136,7 +136,7 @@ export const ClientManager: React.FC = () => {
                 <label className="block text-sm font-medium text-slate-700">Teléfono</label>
                 <input 
                   required
-                  className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 border p-2"
+                  className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-brand focus:ring-brand border p-2"
                   value={formData.phone || ''}
                   onChange={e => setFormData({...formData, phone: e.target.value})}
                 />
@@ -145,7 +145,7 @@ export const ClientManager: React.FC = () => {
                 <label className="block text-sm font-medium text-slate-700">Email (Opcional)</label>
                 <input 
                   type="email"
-                  className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 border p-2"
+                  className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-brand focus:ring-brand border p-2"
                   value={formData.email || ''}
                   onChange={e => setFormData({...formData, email: e.target.value})}
                 />
@@ -153,7 +153,7 @@ export const ClientManager: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-slate-700">Dirección de Entrega</label>
                 <textarea 
-                  className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 border p-2"
+                  className="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-brand focus:ring-brand border p-2"
                   rows={3}
                   value={formData.address || ''}
                   onChange={e => setFormData({...formData, address: e.target.value})}

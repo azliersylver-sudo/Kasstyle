@@ -101,7 +101,7 @@ export const InvoiceList: React.FC = () => {
       <div className="flex gap-2 overflow-x-auto pb-2">
         <button 
             onClick={() => setFilterStatus('all')}
-            className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${filterStatus === 'all' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}
+            className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${filterStatus === 'all' ? 'bg-brand text-white' : 'bg-white text-slate-600 border border-slate-200 hover:text-brand'}`}
         >
             Todos
         </button>
@@ -109,7 +109,7 @@ export const InvoiceList: React.FC = () => {
              <button 
              key={status}
              onClick={() => setFilterStatus(status)}
-             className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${filterStatus === status ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}
+             className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${filterStatus === status ? 'bg-brand text-white' : 'bg-white text-slate-600 border border-slate-200 hover:text-brand'}`}
          >
              {status}
          </button>
@@ -140,7 +140,7 @@ export const InvoiceList: React.FC = () => {
                         <tr 
                             key={inv.id} 
                             onClick={() => handleRowClick(inv)}
-                            className="hover:bg-indigo-50/50 transition-colors cursor-pointer"
+                            className="hover:bg-purple-50/50 transition-colors cursor-pointer"
                         >
                             <td className="px-6 py-4">
                                 <div className="font-medium text-slate-900">{getClientName(inv.clientId)}</div>
@@ -153,7 +153,7 @@ export const InvoiceList: React.FC = () => {
                                 <select
                                     value={inv.status}
                                     onChange={(e) => handleStatusChange(e, inv.id)}
-                                    className={`text-xs font-medium rounded-full px-2 py-1 border focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer ${getStatusColor(inv.status)}`}
+                                    className={`text-xs font-medium rounded-full px-2 py-1 border focus:ring-2 focus:ring-brand outline-none cursor-pointer ${getStatusColor(inv.status)}`}
                                 >
                                     {Object.values(InvoiceStatus).map(s => (
                                         <option key={s} value={s}>{s}</option>
@@ -174,7 +174,7 @@ export const InvoiceList: React.FC = () => {
                                 <div className="flex justify-end gap-2">
                                     <button 
                                       onClick={(e) => handleEdit(e, inv.id)} 
-                                      className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-full transition-colors"
+                                      className="p-2 text-brand hover:bg-purple-100 rounded-full transition-colors"
                                       title="Editar completo"
                                     >
                                         <Edit size={16} />

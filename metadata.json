@@ -1,5 +1,5 @@
 {
-  "name": "VeneOrders Manager",
-  "description": "A robust, offline-first order and invoice management system designed for international purchasing agents in Venezuela. Handles multi-currency (USD/Bs), profit analysis, and client tracking.",
+  "name": "KASSTYLE Manager",
+  "description": "A robust, offline-first order and invoice management",
   "requestFramePermissions": []
 }

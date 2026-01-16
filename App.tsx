@@ -22,8 +22,8 @@ const App: React.FC = () => {
   if (isLoading) {
     return (
         <div className="flex flex-col items-center justify-center h-screen bg-slate-50 text-slate-600">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
-            <h2 className="text-xl font-bold text-slate-800">Cargando VeneOrders...</h2>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand mb-4"></div>
+            <h2 className="text-xl font-bold text-slate-800">Cargando KASSTYLE...</h2>
             <p className="text-sm">Sincronizando con Google Sheets</p>
         </div>
     );

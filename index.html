@@ -3,9 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>VeneOrders Manager</title>
+    <title>KASSTYLE Manager</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                DEFAULT: '#3e136b',
+                light: '#5b2c8a',
+                dark: '#2a0d4a',
+                50: '#f5f3ff',
+                100: '#ede9fe', 
+                600: '#3e136b', // Mapping for ease of use
+                700: '#2e0e52'
+              }
+            }
+          }
+        }
+      }
+    </script>
     <style>
       body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
       /* Custom Scrollbar for better UX */

@@ -270,7 +270,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
             <div className="lg:col-span-2">
                 <label className="block text-sm font-medium text-slate-700 mb-1">Cliente</label>
                 <select 
-                    className="w-full rounded-md border-slate-300 border p-2 focus:ring-indigo-500"
+                    className="w-full rounded-md border-slate-300 border p-2 focus:ring-brand focus:border-brand"
                     value={clientId}
                     onChange={e => setClientId(e.target.value)}
                 >
@@ -281,7 +281,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
             <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Estado</label>
                 <select 
-                    className="w-full rounded-md border-slate-300 border p-2 focus:ring-indigo-500"
+                    className="w-full rounded-md border-slate-300 border p-2 focus:ring-brand focus:border-brand"
                     value={status}
                     onChange={handleStatusChange}
                 >
@@ -299,7 +299,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
             
             <div className="space-y-4">
                 {items.map((item, index) => (
-                    <div key={item.id} className="bg-slate-50 p-4 rounded-lg border border-slate-200 relative group transition-all hover:shadow-md hover:border-indigo-200">
+                    <div key={item.id} className="bg-slate-50 p-4 rounded-lg border border-slate-200 relative group transition-all hover:shadow-md hover:border-purple-200">
                         <button 
                             onClick={() => removeItem(item.id)} 
                             className="absolute top-2 right-2 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -314,14 +314,14 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                                 <div className="flex">
                                     <input 
                                         type="text" 
-                                        className="w-full text-sm border-slate-300 rounded-l-md border p-1" 
+                                        className="w-full text-sm border-slate-300 rounded-l-md border p-1 focus:ring-brand focus:border-brand" 
                                         value={item.name}
                                         onChange={e => updateItem(item.id, 'name', e.target.value)}
                                         placeholder="Nombre del producto"
                                     />
                                     <button 
                                         onClick={() => handleAiDescription(item.id, item.name)}
-                                        className="bg-indigo-100 text-indigo-600 px-2 rounded-r-md border border-l-0 border-indigo-200 hover:bg-indigo-200"
+                                        className="bg-purple-100 text-purple-600 px-2 rounded-r-md border border-l-0 border-purple-200 hover:bg-purple-200"
                                         title="Mejorar descripción con IA"
                                     >
                                         <Wand2 size={14} />
@@ -331,7 +331,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                             <div className="md:col-span-2">
                                 <label className="text-xs text-slate-500">Plataforma</label>
                                 <select 
-                                    className="w-full text-sm border-slate-300 rounded-md border p-1"
+                                    className="w-full text-sm border-slate-300 rounded-md border p-1 focus:ring-brand focus:border-brand"
                                     value={item.platform}
                                     onChange={e => updateItem(item.id, 'platform', e.target.value)}
                                 >
@@ -342,7 +342,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                                 <label className="text-xs text-slate-500">Tracking (Opcional)</label>
                                 <input 
                                     type="text" 
-                                    className="w-full text-sm border-slate-300 rounded-md border p-1" 
+                                    className="w-full text-sm border-slate-300 rounded-md border p-1 focus:ring-brand focus:border-brand" 
                                     value={item.trackingNumber || ''}
                                     onChange={e => updateItem(item.id, 'trackingNumber', e.target.value)}
                                 />
@@ -351,7 +351,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                                 <label className="text-xs text-slate-500">Cant.</label>
                                 <input 
                                     type="number" min="1"
-                                    className="w-full text-sm border-slate-300 rounded-md border p-1" 
+                                    className="w-full text-sm border-slate-300 rounded-md border p-1 focus:ring-brand focus:border-brand" 
                                     value={item.quantity}
                                     onChange={e => updateItem(item.id, 'quantity', parseInt(e.target.value))}
                                 />
@@ -362,7 +362,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                                 <label className={`flex items-center space-x-2 text-sm cursor-pointer p-1 rounded-md border w-full justify-center transition-colors ${item.isElectronics ? 'bg-yellow-50 border-yellow-200 text-yellow-800' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-100'}`}>
                                     <input 
                                         type="checkbox" 
-                                        className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                                        className="rounded text-brand focus:ring-brand h-4 w-4"
                                         checked={item.isElectronics || false}
                                         onChange={e => updateItem(item.id, 'isElectronics', e.target.checked)}
                                     />
@@ -378,7 +378,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                                 <label className="text-xs text-slate-500 font-medium text-orange-600">Costo Orig. ($)</label>
                                 <input 
                                     type="number" step="0.01"
-                                    className="w-full text-sm border-orange-200 bg-orange-50 rounded-md border p-1" 
+                                    className="w-full text-sm border-orange-200 bg-orange-50 rounded-md border p-1 focus:ring-brand focus:border-brand" 
                                     value={item.originalPrice}
                                     onChange={e => updateItem(item.id, 'originalPrice', parseFloat(e.target.value))}
                                 />
@@ -387,7 +387,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                                 <label className="text-xs text-slate-500 font-medium text-green-600">Precio Venta ($)</label>
                                 <input 
                                     type="number" step="0.01"
-                                    className="w-full text-sm border-green-200 bg-green-50 rounded-md border p-1" 
+                                    className="w-full text-sm border-green-200 bg-green-50 rounded-md border p-1 focus:ring-brand focus:border-brand" 
                                     value={item.finalPrice}
                                     onChange={e => updateItem(item.id, 'finalPrice', parseFloat(e.target.value))}
                                 />
@@ -396,7 +396,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                                 <label className="text-xs text-slate-500 font-medium text-purple-600">Comisión ($)</label>
                                 <input 
                                     type="number" step="0.01"
-                                    className="w-full text-sm border-purple-200 bg-purple-50 rounded-md border p-1" 
+                                    className="w-full text-sm border-purple-200 bg-purple-50 rounded-md border p-1 focus:ring-brand focus:border-brand" 
                                     value={item.commission}
                                     onChange={e => updateItem(item.id, 'commission', parseFloat(e.target.value))}
                                 />
@@ -406,7 +406,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                                 <div className="flex">
                                     <input 
                                         type="number" step="0.1"
-                                        className="w-full text-sm border-slate-300 rounded-l-md border p-1" 
+                                        className="w-full text-sm border-slate-300 rounded-l-md border p-1 focus:ring-brand focus:border-brand" 
                                         value={item.weight}
                                         onChange={e => updateItem(item.id, 'weight', parseFloat(e.target.value))}
                                     />
@@ -474,7 +474,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                         <span>Comisiones Internas:</span>
                         <span>${totalCommissions.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between pt-2 border-t border-slate-300 font-bold text-lg text-indigo-700">
+                    <div className="flex justify-between pt-2 border-t border-slate-300 font-bold text-lg text-brand">
                         <span>Total General (USD):</span>
                         <span>${grandTotalUSD.toFixed(2)}</span>
                     </div>
@@ -502,7 +502,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                                  <input 
                                     type="number"
                                     step="0.01"
-                                    className="w-24 text-right p-1 border border-slate-300 rounded text-xs focus:ring-indigo-500"
+                                    className="w-24 text-right p-1 border border-slate-300 rounded text-xs focus:ring-brand"
                                     value={exchangeRate}
                                     onChange={(e) => setExchangeRate(parseFloat(e.target.value))}
                                  />
@@ -516,7 +516,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                     <div className="bg-white p-4 rounded border border-blue-100 shadow-sm">
                         <div className="flex items-center justify-between mb-2">
                             <label className="text-sm font-bold text-slate-700 flex items-center">
-                                <Calculator className="w-4 h-4 mr-1 text-indigo-500"/> 
+                                <Calculator className="w-4 h-4 mr-1 text-brand"/> 
                                 Control de Pagos
                             </label>
                             <span className={`text-xs font-bold px-2 py-0.5 rounded ${percentPaid >= 100 ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
@@ -531,7 +531,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                                     size="sm" 
                                     type="button"
                                     onClick={handleSetSeventyPercent}
-                                    className="text-xs px-2 py-0.5 h-auto bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border-indigo-200"
+                                    className="text-xs px-2 py-0.5 h-auto bg-purple-50 text-purple-600 hover:bg-purple-100 border-purple-200"
                                 >
                                     <Percent size={10} className="mr-1"/> 70%
                                 </Button>
@@ -543,7 +543,7 @@ export const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoiceId, onClose }) 
                                 <input
                                     type="number"
                                     step="0.01"
-                                    className="block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 border p-2"
+                                    className="block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md focus:ring-brand focus:border-brand border p-2"
                                     placeholder="0.00"
                                     value={amountPaid}
                                     onChange={e => handleAmountInput(e.target.value)}

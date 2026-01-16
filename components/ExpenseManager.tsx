@@ -108,7 +108,7 @@ export const ExpenseManager: React.FC = () => {
       return Object.entries(grouped).map(([name, value]) => ({ name, value }));
   }, [expenses]);
 
-  const COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444'];
+  const COLORS = ['#3e136b', '#10b981', '#f59e0b', '#ef4444'];
 
   return (
     <div className="space-y-6">
@@ -204,7 +204,7 @@ export const ExpenseManager: React.FC = () => {
                                      <div className="flex justify-end gap-2">
                                          <button 
                                             onClick={() => handleOpenModal(exp)}
-                                            className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                                            className="p-1.5 text-brand hover:bg-purple-50 rounded transition-colors"
                                          >
                                              <Edit2 size={16} />
                                          </button>
@@ -247,7 +247,7 @@ export const ExpenseManager: React.FC = () => {
                     <input 
                         type="date"
                         required
-                        className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand focus:border-brand"
                         value={formData.date}
                         onChange={e => setFormData({...formData, date: e.target.value})}
                     />
@@ -260,7 +260,7 @@ export const ExpenseManager: React.FC = () => {
                     type="text"
                     required
                     placeholder="Ej. Rollos de envoplast, Pago de flete..."
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand focus:border-brand"
                     value={formData.description}
                     onChange={e => setFormData({...formData, description: e.target.value})}
                 />
@@ -275,7 +275,7 @@ export const ExpenseManager: React.FC = () => {
                             type="number"
                             step="0.01"
                             required
-                            className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                            className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand focus:border-brand"
                             value={formData.amount}
                             onChange={e => setFormData({...formData, amount: e.target.value})}
                         />
@@ -286,7 +286,7 @@ export const ExpenseManager: React.FC = () => {
                     <div className="relative">
                         <Tag className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4" />
                         <select 
-                            className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                            className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand focus:border-brand bg-white"
                             value={formData.category}
                             onChange={e => setFormData({...formData, category: e.target.value})}
                         >

@@ -43,8 +43,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       {/* Mobile Header */}
-      <div className="lg:hidden fixed w-full bg-indigo-700 text-white z-20 flex items-center justify-between px-4 py-3 shadow-md">
-        <span className="font-bold text-lg">VeneOrders</span>
+      <div className="lg:hidden fixed w-full bg-brand text-white z-20 flex items-center justify-between px-4 py-3 shadow-md">
+        <span className="font-bold text-lg">KASSTYLE</span>
         <button onClick={() => setSidebarOpen(!isSidebarOpen)}>
           {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
@@ -52,13 +52,13 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
 
       {/* Sidebar */}
       <aside className={`
-        fixed inset-y-0 left-0 z-10 w-64 bg-slate-900 text-white transform transition-transform duration-200 ease-in-out lg:relative lg:translate-x-0
+        fixed inset-y-0 left-0 z-10 w-64 bg-[#1e0a3c] text-white transform transition-transform duration-200 ease-in-out lg:relative lg:translate-x-0
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        pt-16 lg:pt-0 flex flex-col
+        pt-16 lg:pt-0 flex flex-col border-r border-brand-dark
       `}>
-        <div className="p-6 hidden lg:block">
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">VeneOrders</h1>
-          <p className="text-xs text-slate-400 mt-1">Gestión de Encomiendas</p>
+        <div className="p-6 hidden lg:block bg-brand-dark/30">
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-300 bg-clip-text text-transparent">KASSTYLE</h1>
+          <p className="text-xs text-purple-200 mt-1">Gestión de Encomiendas</p>
         </div>
 
         <nav className="mt-4 px-2 space-y-1 flex-1">
@@ -72,8 +72,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
               className={`
                 w-full flex items-center px-4 py-3 text-sm font-medium rounded-md transition-colors
                 ${activeTab === item.id 
-                  ? 'bg-indigo-600 text-white' 
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'}
+                  ? 'bg-brand text-white shadow-lg shadow-brand/20' 
+                  : 'text-slate-300 hover:bg-white/5 hover:text-white'}
               `}
             >
               <item.icon className="mr-3 h-5 w-5" />
@@ -82,7 +82,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
           ))}
         </nav>
 
-        <div className="p-4 bg-slate-800/50">
+        <div className="p-4 bg-black/20">
            <div className={`flex items-center text-xs mb-2 ${isOnline ? 'text-green-400' : 'text-orange-400'}`}>
              {isOnline ? (
                <Cloud className="h-3 w-3 mr-2" />
@@ -95,7 +95,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
            <button 
              onClick={handleManualSync}
              disabled={isSyncing || !isOnline}
-             className="w-full flex items-center justify-center px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded text-xs text-slate-200 transition-colors disabled:opacity-50"
+             className="w-full flex items-center justify-center px-3 py-2 bg-white/10 hover:bg-white/20 rounded text-xs text-slate-200 transition-colors disabled:opacity-50"
            >
              <RefreshCw className={`h-3 w-3 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
              {isSyncing ? 'Sincronizando...' : 'Forzar Sincronización'}
