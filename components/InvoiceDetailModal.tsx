@@ -3,8 +3,9 @@ import { Invoice, Client, InvoiceStatus } from '../types';
 import { Button } from './Button';
 import { StorageService } from '../services/storage';
 import { X, Printer, ArrowRightLeft, ArrowLeftRight, Download, Loader2 } from 'lucide-react';
-// @ts-ignore
-import html2pdf from 'html2pdf.js';
+
+// Declare global html2pdf loaded via script tag
+declare var html2pdf: any;
 
 interface InvoiceDetailModalProps {
   invoice: Invoice;
@@ -166,8 +167,6 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
     // Crear un contenedor temporal fuera de la vista
     const element = document.createElement('div');
     element.innerHTML = content;
-    // IMPORTANTE: Para que html2canvas funcione, el elemento debe estar en el DOM pero no visible.
-    // Usamos fixed y fuera de pantalla para no afectar el layout.
     element.style.position = 'fixed';
     element.style.left = '-9999px';
     element.style.top = '0';
@@ -177,17 +176,22 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
       margin:       10,
       filename:     `Factura_${invoice.id.slice(0, 6)}.pdf`,
       image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2, useCORS: true, letterRendering: true }, // Escala 2 para mejor calidad
+      html2canvas:  { scale: 2, useCORS: true, letterRendering: true }, 
       jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
 
     try {
+        if (typeof html2pdf === 'undefined') {
+            throw new Error("La librería de PDF no se ha cargado. Por favor recarga la página.");
+        }
         await html2pdf().set(opt).from(element).save();
     } catch (error) {
         console.error("Error generando PDF", error);
-        alert("Hubo un error al generar el PDF. Por favor intente de nuevo.");
+        alert(`Error: ${error instanceof Error ? error.message : 'Error desconocido al generar PDF'}`);
     } finally {
-        document.body.removeChild(element);
+        if (document.body.contains(element)) {
+            document.body.removeChild(element);
+        }
         setIsGeneratingPdf(false);
     }
   };
