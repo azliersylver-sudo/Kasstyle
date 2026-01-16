@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Invoice, Client, InvoiceStatus } from '../types';
 import { Button } from './Button';
 import { StorageService } from '../services/storage';
-import { X, Printer, ArrowRightLeft, ArrowLeftRight, FileSearch } from 'lucide-react';
+import { X, Printer, ArrowRightLeft, ArrowLeftRight, FileText } from 'lucide-react';
 
 interface InvoiceDetailModalProps {
   invoice: Invoice;
@@ -50,7 +50,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
       setIsSwapped(!isSwapped);
   };
 
-  const handlePreview = () => {
+  const handleOpenPdfTab = () => {
     // Obtener precio por Kg actual para el desglose (fallback)
     const pricePerKg = StorageService.getPricePerKg();
 
@@ -68,15 +68,18 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
       const rowTotal = unitFullPrice * item.quantity;
 
       return `
-      <tr style="border-bottom: 1px solid #eee;">
-        <td style="padding: 8px;">
-            ${item.name}
-            ${item.isElectronics ? '<br/><span style="font-size:10px; color:#666;">(Electrónico +20%)</span>' : ''}
+      <tr style="border-bottom: 1px solid #f1f5f9;">
+        <td style="padding: 12px 8px;">
+            <div style="font-weight: 500; color: #1e293b;">${item.name}</div>
+            <div style="font-size: 10px; color: #64748b; margin-top: 2px;">
+                ${item.platform} 
+                ${item.isElectronics ? ' • <span style="color:#ca8a04;">Electrónico (+20%)</span>' : ''}
+            </div>
         </td>
-        <td style="padding: 8px; text-align: center;">${item.quantity}</td>
-        <td style="padding: 8px; text-align: right;">${formatBody(item.finalPrice)}</td>
-        <td style="padding: 8px; text-align: right; color: #666;">${formatBody(unitAddons)}</td>
-        <td style="padding: 8px; text-align: right; font-weight: bold;">${formatBody(rowTotal)}</td>
+        <td style="padding: 12px 8px; text-align: center; color: #475569;">${item.quantity}</td>
+        <td style="padding: 12px 8px; text-align: right; color: #475569;">${formatBody(item.finalPrice)}</td>
+        <td style="padding: 12px 8px; text-align: right; color: #94a3b8; font-size: 11px;">${formatBody(unitAddons)}</td>
+        <td style="padding: 12px 8px; text-align: right; font-weight: 700; color: #1e293b;">${formatBody(rowTotal)}</td>
       </tr>
     `}).join('');
 
@@ -92,139 +95,141 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>Factura #${invoice.id.slice(0, 8)} - KASSTYLE</title>
           <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
+            
             /* Reset & Base */
             * { box-sizing: border-box; }
             body { 
-                font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; 
+                font-family: 'Inter', sans-serif; 
                 margin: 0; 
                 padding: 0; 
-                background-color: #f1f5f9; 
-                color: #333; 
+                background-color: #f8fafc; /* Color de fondo web */
+                color: #334155; 
                 -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
             }
             
-            /* Control Bar (Not Printed) */
+            /* Control Bar (Solo visible en pantalla) */
             .control-bar {
               background-color: #3e136b;
               color: white;
-              padding: 12px 20px;
+              padding: 16px 20px;
               display: flex;
               justify-content: space-between;
               align-items: center;
-              box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+              box-shadow: 0 4px 12px rgba(0,0,0,0.15);
               position: sticky;
               top: 0;
               z-index: 1000;
             }
-            .brand-preview { font-weight: bold; font-size: 18px; letter-spacing: 0.5px; }
-            
-            .btn-group { display: flex; gap: 10px; }
-            .btn {
+            .brand-preview { font-weight: 800; font-size: 18px; letter-spacing: -0.5px; }
+            .btn-action {
+              background: white;
+              color: #3e136b;
               border: none;
-              padding: 10px 20px;
-              border-radius: 6px;
+              padding: 10px 24px;
+              border-radius: 8px;
               font-weight: 600;
-              cursor: pointer;
               font-size: 14px;
+              cursor: pointer;
               display: flex;
               align-items: center;
-              gap: 6px;
+              gap: 8px;
+              box-shadow: 0 2px 4px rgba(0,0,0,0.1);
               transition: transform 0.1s;
             }
-            .btn:active { transform: scale(0.98); }
-            .btn-primary { background: white; color: #3e136b; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-            .btn-secondary { background: rgba(255,255,255,0.15); color: white; }
-            .btn-secondary:hover { background: rgba(255,255,255,0.25); }
+            .btn-action:active { transform: scale(0.96); }
 
-            /* Paper Sheet */
-            .page-container {
+            /* Hoja de Papel */
+            .page {
+              width: 100%;
               max-width: 800px;
-              margin: 30px auto;
+              margin: 40px auto;
               background: white;
-              padding: 40px;
-              box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-              border-radius: 8px;
+              padding: 48px;
+              box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+              border-radius: 12px;
+              position: relative;
             }
 
-            /* Invoice Styles */
-            .header { display: flex; justify-content: space-between; margin-bottom: 40px; border-bottom: 3px solid #3e136b; padding-bottom: 20px; }
-            .title { font-size: 28px; font-weight: 800; text-transform: uppercase; color: #3e136b; letter-spacing: -0.5px; }
-            .subtitle { font-size: 12px; margin-top: 5px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; }
+            /* Header Factura */
+            .invoice-header { display: flex; justify-content: space-between; margin-bottom: 48px; border-bottom: 4px solid #3e136b; padding-bottom: 24px; }
+            .logo-text { font-size: 32px; font-weight: 900; color: #3e136b; letter-spacing: -1px; line-height: 1; }
+            .logo-sub { font-size: 13px; font-weight: 500; color: #64748b; margin-top: 6px; letter-spacing: 0.5px; text-transform: uppercase; }
             
-            .meta { text-align: right; font-size: 14px; line-height: 1.6; }
-            .meta strong { color: #334155; }
-            
-            .client-box { background: #f8fafc; padding: 20px; border-radius: 6px; border-left: 4px solid #cbd5e1; margin-bottom: 30px; }
-            .client-info { font-size: 14px; line-height: 1.6; }
-            
-            table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-            th { text-align: left; background: #f1f5f9; color: #475569; padding: 12px; border-bottom: 2px solid #e2e8f0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
-            td { padding: 12px; border-bottom: 1px solid #e2e8f0; font-size: 13px; color: #1e293b; }
-            
-            .totals { float: right; width: 300px; }
-            .row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; }
-            .grand-total { font-weight: 800; font-size: 18px; border-top: 2px solid #3e136b; margin-top: 10px; padding-top: 15px; color: #3e136b; }
-            
-            .payment-info { border-top: 1px dashed #cbd5e1; margin-top: 15px; padding-top: 15px; }
-            
-            .footer { margin-top: 80px; font-size: 11px; text-align: center; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 20px; }
+            .meta-info { text-align: right; font-size: 13px; line-height: 1.6; }
+            .meta-label { color: #94a3b8; font-weight: 500; text-transform: uppercase; font-size: 11px; margin-right: 8px; }
+            .meta-value { color: #0f172a; font-weight: 600; }
+            .status-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; background: #f1f5f9; color: #475569; }
 
-            /* Print Overrides */
+            /* Cliente */
+            .client-section { background: #f8fafc; padding: 24px; border-radius: 8px; margin-bottom: 40px; border-left: 4px solid #cbd5e1; }
+            .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #94a3b8; margin-bottom: 8px; letter-spacing: 0.5px; }
+            .client-name { font-size: 16px; font-weight: 700; color: #1e293b; margin-bottom: 4px; }
+            .client-detail { font-size: 14px; color: #475569; line-height: 1.5; }
+
+            /* Tabla */
+            table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
+            th { text-align: left; background: #f1f5f9; color: #64748b; padding: 12px 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e2e8f0; }
+            
+            /* Totales */
+            .totals-container { display: flex; justify-content: flex-end; }
+            .totals-box { width: 320px; }
+            .total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; color: #475569; }
+            .total-row.final { border-top: 2px solid #3e136b; margin-top: 12px; padding-top: 16px; font-size: 20px; font-weight: 800; color: #3e136b; }
+            
+            .payment-box { margin-top: 24px; background: #fefce8; border: 1px dashed #eab308; padding: 16px; border-radius: 8px; }
+            .payment-row { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 4px; }
+            .payment-row:last-child { margin-bottom: 0; font-weight: 700; margin-top: 8px; border-top: 1px solid rgba(0,0,0,0.05); padding-top: 8px; }
+
+            .footer { margin-top: 80px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 24px; }
+
+            /* Estilos de Impresión */
             @media print {
               .control-bar { display: none !important; }
-              body { background: white; margin: 0; }
-              .page-container { 
-                box-shadow: none; 
-                margin: 0; 
-                width: 100%; 
-                max-width: none; 
-                padding: 0; /* Remove padding to fit paper better */
-              }
+              body { background: white; -webkit-print-color-adjust: exact; }
+              .page { box-shadow: none; margin: 0; padding: 0; max-width: none; border-radius: 0; }
+              .client-section, .payment-box { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             }
           </style>
         </head>
         <body>
           <div class="control-bar">
-             <div class="brand-preview">KASSTYLE <span style="font-weight:400; font-size:14px; opacity:0.8;">| Vista Previa</span></div>
-             <div class="btn-group">
-                <button class="btn btn-secondary" onclick="window.close()">Cerrar</button>
-                <button class="btn btn-primary" onclick="window.print()">
-                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
-                   Imprimir / Descargar
-                </button>
-             </div>
+             <div class="brand-preview">Vista Previa Documento</div>
+             <button class="btn-action" onclick="window.print()">
+               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+               Imprimir / Guardar PDF
+             </button>
           </div>
 
-          <div class="page-container">
-            <div class="header">
+          <div class="page">
+            <div class="invoice-header">
               <div>
-                <div class="title">KASSTYLE</div>
-                <div class="subtitle">Servicio de Importación Internacional</div>
+                <div class="logo-text">KASSTYLE</div>
+                <div class="logo-sub">Logística Internacional</div>
               </div>
-              <div class="meta">
-                <div><strong>Factura:</strong> #${invoice.id.slice(0, 8)}</div>
-                <div><strong>Fecha:</strong> ${new Date(invoice.createdAt).toLocaleDateString()}</div>
-                <div><strong>Estado:</strong> ${invoice.status}</div>
+              <div class="meta-info">
+                <div><span class="meta-label">Factura</span> <span class="meta-value">#${invoice.id.slice(0, 8)}</span></div>
+                <div style="margin-top:4px;"><span class="meta-label">Fecha</span> <span class="meta-value">${new Date(invoice.createdAt).toLocaleDateString()}</span></div>
+                <div style="margin-top:8px;"><span class="status-badge">${invoice.status}</span></div>
               </div>
             </div>
 
-            <div class="client-box">
-              <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700; margin-bottom: 5px;">Cliente</div>
-              <div class="client-info">
-                <strong>${client.name}</strong><br/>
-                ${client.phone}<br/>
-                ${client.address || ''}
-              </div>
+            <div class="client-section">
+              <div class="section-title">Información del Cliente</div>
+              <div class="client-name">${client.name}</div>
+              <div class="client-detail">${client.phone}</div>
+              <div class="client-detail">${client.address || ''}</div>
             </div>
 
             <table>
               <thead>
                 <tr>
-                  <th width="40%">Descripción</th>
+                  <th width="45%">Descripción del Producto</th>
                   <th width="10%" style="text-align: center;">Cant.</th>
                   <th width="15%" style="text-align: right;">Precio Unit.</th>
-                  <th width="15%" style="text-align: right;">Envío</th>
-                  <th width="20%" style="text-align: right;">TOTAL</th>
+                  <th width="10%" style="text-align: right;">Envío+</th>
+                  <th width="20%" style="text-align: right;">Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -232,45 +237,50 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
               </tbody>
             </table>
 
-            <div class="totals">
-              <!-- Nota: Al desglosar logística en las filas, la suma de las filas es el Total General -->
-              <div class="row grand-total">
-                <span>TOTAL GENERAL (${currencySymbolBody}):</span>
-                <span>${formatBody(grandTotal)}</span>
-              </div>
-              
-              <div class="payment-info">
-                  <div class="row">
-                      <span>Abonado:</span>
-                      <span>${paidStr}</span>
-                  </div>
-                  <div class="row" style="color: ${remainingBalanceUSD <= 0 ? '#10b981' : '#d97706'}; font-weight: bold;">
-                      <span>Restante:</span>
-                      <span>${remainingStr}</span>
-                  </div>
+            <div class="totals-container">
+              <div class="totals-box">
+                <div class="total-row">
+                   <span>Subtotal Productos</span>
+                   <span>${formatBody(subTotalProducts)}</span>
+                </div>
+                <div class="total-row">
+                   <span>Logística y Manejo</span>
+                   <span>${formatBody(displayLogistics)}</span>
+                </div>
+                <div class="total-row final">
+                   <span>TOTAL A PAGAR</span>
+                   <span>${formatBody(grandTotal)}</span>
+                </div>
+
+                <div class="payment-box" style="background: ${remainingBalanceUSD <= 0 ? '#f0fdf4' : '#fffbeb'}; border-color: ${remainingBalanceUSD <= 0 ? '#22c55e' : '#eab308'};">
+                    <div class="payment-row">
+                        <span>Monto Abonado</span>
+                        <span style="font-weight:600;">${paidStr}</span>
+                    </div>
+                    <div class="payment-row" style="color: ${remainingBalanceUSD <= 0 ? '#15803d' : '#b45309'};">
+                        <span>Restante Pendiente</span>
+                        <span>${remainingStr}</span>
+                    </div>
+                </div>
               </div>
             </div>
 
-            <div style="clear: both;"></div>
-
             <div class="footer">
-              <p>Gracias por su preferencia.</p>
-              <p style="margin-top: 5px;">KASSTYLE Manager</p>
+              <p>Gracias por elegir KASSTYLE.</p>
+              <p style="margin-top: 4px;">Este documento sirve como comprobante de gestión de encomienda.</p>
             </div>
           </div>
         </body>
       </html>
     `;
 
-    // Open in New Window/Tab (Mobile Friendly)
+    // Abrir en nueva pestaña (Solución universal móvil)
     const win = window.open('', '_blank');
     if (win) {
         win.document.write(html);
         win.document.close();
-        // Focus for desktop usability
-        win.focus();
     } else {
-        alert("Por favor, permite las ventanas emergentes (pop-ups) para ver la factura.");
+        alert("Por favor, permite abrir ventanas emergentes para ver el PDF.");
     }
   };
 
@@ -306,9 +316,9 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
                     <ArrowRightLeft className="w-4 h-4 mr-2" />
                     {isBsContext ? 'Volver a USD' : 'Ver en Bolívares'}
                  </Button>
-                 <Button size="sm" onClick={handlePreview} className="bg-brand hover:bg-brand-light text-white">
-                    <FileSearch className="w-4 h-4 mr-2" />
-                    Vista Previa PDF
+                 <Button size="sm" onClick={handleOpenPdfTab} className="bg-brand hover:bg-brand-light text-white shadow-md shadow-brand/20">
+                    <FileText className="w-4 h-4 mr-2" />
+                    Ver / Descargar PDF
                  </Button>
              </div>
           </div>
