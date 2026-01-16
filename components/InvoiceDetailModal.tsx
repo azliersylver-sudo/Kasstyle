@@ -51,10 +51,13 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
   };
 
   const handlePrint = () => {
+    // Safety check for items
+    const safeItems = invoice.items || [];
+    
     // Obtener precio por Kg actual para el desglose (fallback)
     const pricePerKg = StorageService.getPricePerKg();
 
-    const itemsHtml = invoice.items.map(item => {
+    const itemsHtml = safeItems.map(item => {
       // Cálculo de logística unitaria para visualización en tabla
       const weightKg = item.weightUnit === 'lb' ? (item.weight / 2.20462) : item.weight;
       const elecTax = item.isElectronics ? (item.originalPrice * 0.20) : 0;
@@ -87,33 +90,9 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
     const paidStr = formatBody(paidAmount);
     const remainingStr = formatRemaining(remainingBalanceUSD);
 
-    const html = `
-      <html>
-        <head>
-          <title>Factura #${invoice.id.slice(0, 8)}</title>
-          <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
-            body { font-family: 'Inter', sans-serif; padding: 20px; color: #333; font-size: 14px; }
-            .header { display: flex; justify-content: space-between; margin-bottom: 20px; border-bottom: 2px solid #3e136b; padding-bottom: 15px; }
-            .title { font-size: 22px; font-weight: 900; color: #3e136b; letter-spacing: -1px; }
-            .meta { text-align: right; font-size: 12px; }
-            .client-info { margin-bottom: 20px; background: #f8fafc; padding: 15px; border-radius: 5px; border-left: 3px solid #cbd5e1; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-            th { text-align: left; background: #f1f5f9; padding: 8px; border-bottom: 2px solid #ddd; font-size: 11px; text-transform: uppercase; font-weight: 700; color: #64748b; }
-            .totals { float: right; width: 250px; }
-            .row { display: flex; justify-content: space-between; padding: 5px 0; }
-            .grand-total { font-weight: bold; font-size: 16px; border-top: 2px solid #3e136b; margin-top: 10px; padding-top: 10px; color: #3e136b; }
-            .footer { margin-top: 50px; font-size: 10px; text-align: center; color: #94a3b8; border-top: 1px solid #eee; padding-top: 15px; }
-            .payment-info { border-top: 1px dashed #ccc; margin-top: 10px; padding-top: 10px; }
-            
-            @media print {
-               @page { margin: 10mm; }
-               body { padding: 0; }
-               .client-info { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            }
-          </style>
-        </head>
-        <body>
+    // Contenido HTML para el área de impresión
+    const printContent = `
+       <div class="print-page">
           <div class="header">
             <div>
               <div class="title">KASSTYLE</div>
@@ -170,43 +149,64 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
           <div class="footer">
             <p>Gracias por elegir KASSTYLE. Comprobante generado electrónicamente.</p>
           </div>
-        </body>
-      </html>
+       </div>
+
+       <style>
+            .print-page { font-family: 'Helvetica', sans-serif; padding: 20px; color: #333; font-size: 14px; background: white; }
+            .header { display: flex; justify-content: space-between; margin-bottom: 20px; border-bottom: 2px solid #3e136b; padding-bottom: 15px; }
+            .title { font-size: 22px; font-weight: 900; color: #3e136b; letter-spacing: -1px; }
+            .meta { text-align: right; font-size: 12px; }
+            .client-info { margin-bottom: 20px; background: #f8fafc; padding: 15px; border-radius: 5px; border-left: 3px solid #cbd5e1; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+            th { text-align: left; background: #f1f5f9; padding: 8px; border-bottom: 2px solid #ddd; font-size: 11px; text-transform: uppercase; font-weight: 700; color: #64748b; }
+            .totals { float: right; width: 250px; }
+            .row { display: flex; justify-content: space-between; padding: 5px 0; }
+            .grand-total { font-weight: bold; font-size: 16px; border-top: 2px solid #3e136b; margin-top: 10px; padding-top: 10px; color: #3e136b; }
+            .footer { margin-top: 50px; font-size: 10px; text-align: center; color: #94a3b8; border-top: 1px solid #eee; padding-top: 15px; }
+            .payment-info { border-top: 1px dashed #ccc; margin-top: 10px; padding-top: 10px; }
+       </style>
     `;
 
-    // Creación de Iframe invisible para impresión directa
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = '0';
-    document.body.appendChild(iframe);
-
-    const doc = iframe.contentWindow?.document;
-    if (doc) {
-        doc.open();
-        doc.write(html);
-        doc.close();
-
-        // Pequeño timeout para asegurar que el contenido (estilos/fuentes) se renderice antes de llamar a print
-        setTimeout(() => {
-            iframe.contentWindow?.focus();
-            try {
-                const result = iframe.contentWindow?.print();
-            } catch (e) {
-                console.error("Print Error", e);
-            }
-            
-            // Limpieza del DOM
-            setTimeout(() => {
-                if (document.body.contains(iframe)) {
-                    document.body.removeChild(iframe);
-                }
-            }, 3000); 
-        }, 500);
+    // 1. Obtener o crear el contenedor de impresión
+    let printWrapper = document.getElementById('print-wrapper');
+    if (!printWrapper) {
+        printWrapper = document.createElement('div');
+        printWrapper.id = 'print-wrapper';
+        document.body.appendChild(printWrapper);
     }
+
+    // 2. Inyectar contenido
+    printWrapper.innerHTML = printContent;
+
+    // 3. Asegurar que tenemos los estilos globales de impresión
+    let globalStyle = document.getElementById('global-print-style');
+    if (!globalStyle) {
+        globalStyle = document.createElement('style');
+        globalStyle.id = 'global-print-style';
+        globalStyle.innerHTML = `
+            @media print {
+                body > * { display: none !important; }
+                #print-wrapper { display: block !important; position: absolute; left: 0; top: 0; width: 100%; height: auto; overflow: visible; }
+                #print-wrapper * { visibility: visible; }
+                @page { margin: 1cm; }
+            }
+            #print-wrapper { display: none; }
+        `;
+        document.head.appendChild(globalStyle);
+    }
+
+    // 4. Imprimir
+    // Pequeño delay para asegurar que el DOM se actualizó
+    setTimeout(() => {
+        window.print();
+        
+        // Limpieza opcional post-impresión
+        // No removemos el wrapper para evitar parpadeos si el usuario cancela rápido, 
+        // pero podemos limpiar el HTML
+        setTimeout(() => {
+             if (printWrapper) printWrapper.innerHTML = '';
+        }, 1000);
+    }, 100);
   };
 
   return (
