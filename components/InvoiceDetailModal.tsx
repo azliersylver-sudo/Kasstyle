@@ -51,9 +51,6 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
   };
 
   const handlePrint = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-
     // Obtener precio por Kg actual para el desglose (fallback)
     const pricePerKg = StorageService.getPricePerKg();
 
@@ -93,7 +90,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
           <title>Factura #${invoice.id.slice(0, 8)}</title>
           <style>
             body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #333; }
-            .header { display: flex; justify-content: space-between; margin-bottom: 40px; border-bottom: 2px solid #333; padding-bottom: 20px; }
+            .header { display: flex; justify-content: space-between; margin-bottom: 40px; border-bottom: 2px solid #3e136b; padding-bottom: 20px; }
             .title { font-size: 24px; font-weight: bold; text-transform: uppercase; color: #3e136b; }
             .meta { text-align: right; font-size: 14px; }
             .client-info { margin-bottom: 30px; }
@@ -101,9 +98,13 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
             th { text-align: left; background: #f8fafc; padding: 10px; border-bottom: 2px solid #ddd; font-size: 11px; text-transform: uppercase; }
             .totals { float: right; width: 300px; }
             .row { display: flex; justify-content: space-between; padding: 5px 0; }
-            .grand-total { font-weight: bold; font-size: 18px; border-top: 2px solid #333; margin-top: 10px; padding-top: 10px; }
+            .grand-total { font-weight: bold; font-size: 18px; border-top: 2px solid #3e136b; margin-top: 10px; padding-top: 10px; }
             .footer { margin-top: 60px; font-size: 12px; text-align: center; color: #777; border-top: 1px solid #eee; padding-top: 20px; }
             .payment-info { border-top: 1px dashed #ccc; margin-top: 10px; padding-top: 10px; }
+            @media print {
+               @page { margin: 0; }
+               body { padding: 40px; -webkit-print-color-adjust: exact; }
+            }
           </style>
         </head>
         <body>
@@ -166,12 +167,41 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
             <p>Gracias por su preferencia.</p>
           </div>
         </body>
-        <script>window.print();</script>
       </html>
     `;
 
-    printWindow.document.write(html);
-    printWindow.document.close();
+    // Direct Print for Mobile/Desktop (avoids pop-up blockers)
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (doc) {
+        doc.open();
+        doc.write(html);
+        doc.close();
+
+        setTimeout(() => {
+            iframe.contentWindow?.focus();
+            try {
+                iframe.contentWindow?.print();
+            } catch (e) {
+                console.error("Print failed", e);
+            }
+            
+            // Clean up
+            setTimeout(() => {
+                if (document.body.contains(iframe)) {
+                    document.body.removeChild(iframe);
+                }
+            }, 5000); 
+        }, 500);
+    }
   };
 
   return (
