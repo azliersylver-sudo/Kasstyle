@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Invoice, Client, InvoiceStatus } from '../types';
 import { Button } from './Button';
-import { X, Printer, RefreshCw, ArrowRightLeft, ArrowLeftRight } from 'lucide-react';
+import { StorageService } from '../services/storage';
+import { X, Printer, ArrowRightLeft, ArrowLeftRight } from 'lucide-react';
 
 interface InvoiceDetailModalProps {
   invoice: Invoice;
@@ -32,9 +33,6 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
   const formatBs = (amountUSD: number) => `Bs ${(amountUSD * rate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   // --- VIEW LOGIC ---
-  // State 1 (Default): "Todo en Bolívares menos el restante" -> Body: Bs, Remaining: USD
-  // State 2 (Swapped): "Todo en Dolares menos el restante" -> Body: USD, Remaining: Bs
-  
   const showBodyInBs = isBsContext && !isSwapped;
   const showRemainingInBs = isBsContext && isSwapped;
 
@@ -45,7 +43,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
 
   const toggleCurrency = () => {
     setCurrency(prev => prev === 'USD' ? 'Bs' : 'USD');
-    setIsSwapped(false); // Reset to default when entering Bs mode
+    setIsSwapped(false); 
   };
 
   const toggleSwap = () => {
@@ -56,20 +54,39 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
-    const itemsHtml = invoice.items.map(item => `
+    // Obtener precio por Kg actual para el desglose (fallback)
+    const pricePerKg = StorageService.getPricePerKg();
+
+    const itemsHtml = invoice.items.map(item => {
+      // Cálculo de logística unitaria para visualización en tabla
+      const weightKg = item.weightUnit === 'lb' ? (item.weight / 2.20462) : item.weight;
+      const elecTax = item.isElectronics ? (item.originalPrice * 0.20) : 0;
+      const baseLogistics = weightKg * pricePerKg;
+      
+      // Logística + Comisión Unitaria
+      const unitAddons = baseLogistics + elecTax + item.commission;
+      
+      // Total de la línea (Precio Venta + Logística Completa) * Cantidad
+      const unitFullPrice = item.finalPrice + unitAddons;
+      const rowTotal = unitFullPrice * item.quantity;
+
+      return `
       <tr style="border-bottom: 1px solid #eee;">
-        <td style="padding: 8px;">${item.name}</td>
+        <td style="padding: 8px;">
+            ${item.name}
+            ${item.isElectronics ? '<br/><span style="font-size:10px; color:#666;">(Electrónico +20%)</span>' : ''}
+        </td>
         <td style="padding: 8px; text-align: center;">${item.quantity}</td>
         <td style="padding: 8px; text-align: right;">${formatBody(item.finalPrice)}</td>
-        <td style="padding: 8px; text-align: right;">${formatBody((item.finalPrice || 0) * (item.quantity || 0))}</td>
+        <td style="padding: 8px; text-align: right; color: #666;">${formatBody(unitAddons)}</td>
+        <td style="padding: 8px; text-align: right; font-weight: bold;">${formatBody(rowTotal)}</td>
       </tr>
-    `).join('');
+    `}).join('');
 
     // Payment Section for Print
     const paidStr = formatBody(paidAmount);
     const remainingStr = formatRemaining(remainingBalanceUSD);
 
-    // CLEAN PDF: No disclaimers about rates
     const html = `
       <html>
         <head>
@@ -81,7 +98,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
             .meta { text-align: right; font-size: 14px; }
             .client-info { margin-bottom: 30px; }
             table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-            th { text-align: left; background: #f8fafc; padding: 10px; border-bottom: 2px solid #ddd; font-size: 12px; text-transform: uppercase; }
+            th { text-align: left; background: #f8fafc; padding: 10px; border-bottom: 2px solid #ddd; font-size: 11px; text-transform: uppercase; }
             .totals { float: right; width: 300px; }
             .row { display: flex; justify-content: space-between; padding: 5px 0; }
             .grand-total { font-weight: bold; font-size: 18px; border-top: 2px solid #333; margin-top: 10px; padding-top: 10px; }
@@ -112,10 +129,11 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
           <table>
             <thead>
               <tr>
-                <th>Descripción</th>
-                <th style="text-align: center;">Cant.</th>
-                <th style="text-align: right;">Precio Unit.</th>
-                <th style="text-align: right;">Total</th>
+                <th width="40%">Descripción</th>
+                <th width="10%" style="text-align: center;">Cant.</th>
+                <th width="15%" style="text-align: right;">Precio Unit.</th>
+                <th width="15%" style="text-align: right;">Logística (+Com)</th>
+                <th width="20%" style="text-align: right;">TOTAL</th>
               </tr>
             </thead>
             <tbody>
@@ -124,14 +142,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
           </table>
 
           <div class="totals">
-            <div class="row">
-              <span>Subtotal Productos:</span>
-              <span>${formatBody(subTotalProducts)}</span>
-            </div>
-            <div class="row">
-              <span>Logística y Manejo:</span>
-              <span>${formatBody(displayLogistics)}</span>
-            </div>
+            <!-- Nota: Al desglosar logística en las filas, la suma de las filas es el Total General -->
             <div class="row grand-total">
               <span>TOTAL GENERAL (${currencySymbolBody}):</span>
               <span>${formatBody(grandTotal)}</span>
@@ -202,7 +213,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
              </div>
           </div>
 
-          {/* Products Table */}
+          {/* Products Table (On Screen - Keeping original simplified view for UI) */}
           <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden mb-6">
             <table className="w-full text-sm">
                 <thead className="bg-slate-50 border-b border-slate-200">
@@ -260,7 +271,6 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
                     <div className={`flex justify-between items-start text-sm font-bold ${remainingBalanceUSD <= 0 ? 'text-green-600' : 'text-orange-600'}`}>
                         <div className="flex items-center gap-2">
                             <span>Restante por Pagar</span>
-                            {/* Toggle Button Inside Bolivares Mode */}
                             {isBsContext && remainingBalanceUSD > 0 && (
                                 <button 
                                     onClick={toggleSwap}
