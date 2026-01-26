@@ -54,10 +54,13 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
     const safeItems = invoice.items || [];
     const pricePerKg = StorageService.getPricePerKg();
 
-    // Construcción de filas con estilos inline robustos para impresión
     const itemsHtml = safeItems.map(item => {
       const weightKg = item.weightUnit === 'lb' ? (item.weight / 2.20462) : item.weight;
-      const elecTax = item.isElectronics ? (item.originalPrice * 0.20) : 0;
+      
+      // Updated Formula: (Costo Orig - Impuesto - Descuento) * 0.20
+      const taxableBase = (item.originalPrice || 0) - (item.taxes || 0) - (item.discounts || 0);
+      const elecTax = item.isElectronics ? (taxableBase * 0.20) : 0;
+      
       const baseLogistics = weightKg * pricePerKg;
       const unitAddons = baseLogistics + elecTax + item.commission;
       const unitFullPrice = item.finalPrice + unitAddons;
@@ -83,8 +86,6 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
     const paidStr = formatBody(paidAmount);
     const remainingStr = formatRemaining(remainingBalanceUSD);
 
-    // Template del cuerpo de la factura
-    // NOTA: Usamos una clase 'invoice-container' en lugar de estilos inline fijos para el wrapper principal
     const invoiceBody = `
        <div class="invoice-container">
           
@@ -158,7 +159,6 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
        </div>
     `;
 
-    // --- LÓGICA DE VENTANA NUEVA ---
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
         alert("Por favor permite las ventanas emergentes para ver la factura.");
@@ -171,7 +171,6 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
         <head>
           <title>Factura ${invoice.id.slice(0, 8)} - KASSTYLE</title>
           <style>
-            /* Reset Global y Box Sizing para evitar cálculos erróneos de ancho */
             * { box-sizing: border-box; }
             body { margin: 0; padding: 0; background-color: #f3f4f6; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
             
@@ -180,7 +179,6 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
                 margin: 0 auto;
             }
 
-            /* Estilos para Pantalla (Vista Previa en la nueva pestaña) */
             @media screen {
                body { padding: 40px 0; display: flex; justify-content: center; }
                .invoice-container { 
@@ -191,9 +189,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
                }
             }
 
-            /* Estilos para Impresión / Guardar PDF */
             @media print {
-              /* Configuramos la página y los márgenes seguros (12mm es estándar y seguro) */
               @page { size: A4; margin: 12mm; }
               
               body { 
@@ -202,7 +198,6 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
                  print-color-adjust: exact;
               }
               
-              /* El contenedor se adapta al ancho de la hoja restando los márgenes del @page */
               .invoice-container {
                  width: 100% !important;
                  max-width: none !important;
@@ -212,7 +207,6 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
                  border: none !important;
               }
 
-              /* Aseguramos que las tablas no se salgan */
               table { width: 100% !important; }
             }
           </style>
@@ -243,7 +237,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
             <h2 className="text-2xl font-bold text-slate-800">Factura #{invoice.id.slice(0, 6)}...</h2>
             <p className="text-sm text-slate-500">{new Date(invoice.createdAt).toLocaleDateString()} &bull; {client.name}</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 transition-colors">
+          <button onClose={onClose} className="text-slate-400 hover:text-slate-700 transition-colors">
             <X size={24} />
           </button>
         </div>

@@ -1,22 +1,17 @@
 import { Client, Invoice, InvoiceStatus, ProductItem, Expense } from '../types';
 
-// TU URL DE GOOGLE APPS SCRIPT
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxBpoEQS4ZHx97WST_rOaN5cTE8smy3R4u8dLQ4OTkbOBHg6qvLMDWVksc1dxenKgCfag/exec';
 
 const DEFAULT_SETTINGS = { exchangeRate: 40.5, pricePerKg: 15.43 };
 
-// --- Helper: Safe Float Parsing (Handles "15,50" and "15.50") ---
 const safeParseFloat = (val: any): number => {
   if (typeof val === 'number') return val;
   if (val === undefined || val === null || val === '') return 0;
-  
-  // Convert to string and handle Spanish/European comma format
   const str = String(val).replace(',', '.');
   const num = parseFloat(str);
   return isNaN(num) ? 0 : num;
 };
 
-// --- Helper: Safe ID Generation (Works on non-secure contexts) ---
 const generateId = (): string => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID();
@@ -24,13 +19,11 @@ const generateId = (): string => {
   return Date.now().toString(36) + Math.random().toString(36).substring(2);
 };
 
-// --- In-Memory State ---
 let _clients: Client[] = [];
 let _invoices: Invoice[] = [];
 let _expenses: Expense[] = [];
 let _settings = { ...DEFAULT_SETTINGS };
 
-// Observer Pattern
 type Listener = () => void;
 let listeners: Listener[] = [];
 
@@ -39,27 +32,24 @@ const notifyListeners = () => {
 };
 
 const pushToCloud = async () => {
-  // Sanitize data before sending
   const payload = {
     clients: _clients,
     invoices: _invoices,
     expenses: _expenses.map(e => ({
         ...e,
-        amount: safeParseFloat(e.amount), // Force number
+        amount: safeParseFloat(e.amount),
         date: e.date || new Date().toISOString()
     })),
     settings: _settings
   };
 
   try {
-    // Usamos 'text/plain' para evitar problemas de CORS y asegurarnos de que Apps Script reciba el string completo.
     await fetch(SCRIPT_URL, {
       method: 'POST',
       mode: 'no-cors', 
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload)
     });
-    console.log(`☁️ Sincronizado con Sheet. Gastos enviados: ${payload.expenses.length}`);
   } catch (error) {
     console.error('❌ Error guardando en nube:', error);
   }
@@ -81,7 +71,6 @@ export const StorageService = {
       _clients = Array.isArray(data.clients) ? data.clients : [];
       _invoices = Array.isArray(data.invoices) ? data.invoices : [];
       
-      // Ensure expenses are parsed correctly
       if (Array.isArray(data.expenses)) {
         _expenses = data.expenses.map((e: any) => ({
             ...e,
@@ -94,13 +83,11 @@ export const StorageService = {
       _settings = data.settings || DEFAULT_SETTINGS;
       
       notifyListeners();
-      console.log('✅ Datos descargados del Sheet:', data);
     } catch (error) {
       console.error('❌ Fallo carga inicial:', error);
     }
   },
 
-  // --- CLIENTS ---
   getClients: (): Client[] => [..._clients],
   
   saveClient: async (client: Client) => {
@@ -120,18 +107,19 @@ export const StorageService = {
     await pushToCloud();
   },
 
-  // --- INVOICES ---
   getInvoices: (): Invoice[] => {
      return _invoices.map(inv => {
          const items = (inv.items || []).map(item => ({
              ...item,
-             weight: safeParseFloat(item.weight !== undefined ? item.weight : (item as any).weightLb),
+             weight: safeParseFloat(item.weight),
              quantity: safeParseFloat(item.quantity),
              originalPrice: safeParseFloat(item.originalPrice),
+             taxes: safeParseFloat(item.taxes !== undefined ? item.taxes : 3.99), // Fallback to default
+             discounts: safeParseFloat(item.discounts || 0),
              finalPrice: safeParseFloat(item.finalPrice),
              commission: safeParseFloat(item.commission),
-             weightUnit: item.weightUnit || 'lb',
-             isElectronics: !!item.isElectronics // Ensure boolean
+             weightUnit: item.weightUnit || 'kg',
+             isElectronics: !!item.isElectronics 
          }));
 
          const logisticsCost = safeParseFloat(inv.logisticsCost);
@@ -221,7 +209,6 @@ export const StorageService = {
     await pushToCloud();
   },
 
-  // --- EXPENSES ---
   getExpenses: (): Expense[] => {
     return _expenses.map(e => ({
         ...e,
@@ -234,7 +221,6 @@ export const StorageService = {
     if (index >= 0) {
         _expenses[index] = expense;
     } else {
-        // Ensure ID exists - use the one passed or generate
         const newExpense = { ...expense, id: expense.id || generateId() };
         _expenses.push(newExpense);
     }
@@ -248,7 +234,6 @@ export const StorageService = {
     await pushToCloud();
   },
 
-  // --- SETTINGS ---
   getExchangeRate: (): number => safeParseFloat(_settings.exchangeRate) || 40.5,
 
   setExchangeRate: async (rate: number) => {

@@ -19,14 +19,16 @@ export interface ProductItem {
   id: string;
   name: string;
   quantity: number;
-  weight: number; // Numeric value
-  weightUnit: 'lb' | 'kg'; // Unit selector
+  weight: number; 
+  weightUnit: 'lb' | 'kg'; 
   platform: Platform;
   trackingNumber?: string;
-  originalPrice: number; // Cost from platform
-  finalPrice: number; // Price sold to client (with/without discount)
-  commission: number; // Hidden fee
-  isElectronics?: boolean; // New field for 20% tax calculation
+  originalPrice: number; 
+  taxes: number; // New field
+  discounts: number; // New field
+  finalPrice: number; 
+  commission: number; 
+  isElectronics?: boolean;
 }
 
 export interface Client {
@@ -41,21 +43,17 @@ export interface Client {
 export interface Invoice {
   id: string;
   clientId: string;
-  createdAt: string; // ISO Date
+  createdAt: string; 
   updatedAt: string;
   status: InvoiceStatus;
-  exchangeRate: number; // Bs per USD
+  exchangeRate: number; 
   items: ProductItem[];
-  logisticsCost: number; // Shipping fee (Weight cost + Electronics tax)
-  
-  // Payment tracking
-  amountPaid: number; // New field for partial payments
-  
-  // Calculated fields (persisted for ease of history)
-  totalProductCost: number; // Sum of original prices
-  totalProductSale: number; // Sum of final prices
-  totalCommissions: number; // Sum of commissions
-  grandTotalUsd: number; // totalProductSale + logisticsCost (Commission is usually inside logistics or price)
+  logisticsCost: number; 
+  amountPaid: number; 
+  totalProductCost: number; 
+  totalProductSale: number; 
+  totalCommissions: number; 
+  grandTotalUsd: number; 
 }
 
 export interface Expense {
@@ -63,10 +61,9 @@ export interface Expense {
   description: string;
   amount: number;
   category: 'Material' | 'Servicio' | 'Transporte' | 'Otro';
-  date: string; // ISO Date
+  date: string; 
 }
 
-// Helper interface for Dashboard data
 export interface FinancialStats {
   revenue: number;
   netProfit: number;

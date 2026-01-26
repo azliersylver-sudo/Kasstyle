@@ -81,7 +81,9 @@ export const Dashboard: React.FC = () => {
 
          const invItems = inv.items || [];
          const theoreticalProfit = invItems.reduce((acc, item) => {
-            return acc + (((item.finalPrice || 0) - (item.originalPrice || 0)) + (item.commission || 0)) * (item.quantity || 0);
+            // NEW FORMULA: Venta + Comisión - (Costo - Impuesto)
+            const unitGain = (item.finalPrice || 0) + (item.commission || 0) - ((item.originalPrice || 0) - (item.taxes || 0));
+            return acc + (unitGain * (item.quantity || 0));
          }, 0);
 
          // Calculate realized profit based on % paid
