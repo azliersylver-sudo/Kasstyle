@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { Invoice, InvoiceStatus, Expense } from '../types';
+import { Invoice, InvoiceStatus, Expense, Client } from '../types';
 import { StorageService } from '../services/storage';
 import { GeminiService } from '../services/geminiService';
 import { DollarSign, TrendingUp, Package, AlertCircle, Sparkles, Settings, X, Calendar, FileDown, TrendingDown, Percent } from 'lucide-react';
@@ -146,6 +146,9 @@ export const Dashboard: React.FC = () => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
+    const clients = StorageService.getClients();
+    const getClientName = (id: string) => clients.find(c => c.id === id)?.name || 'Cliente Desconocido';
+
     const rangeLabels: Record<TimeRange, string> = {
         week: 'Últimos 7 Días',
         month: 'Mes Actual',
@@ -153,33 +156,74 @@ export const Dashboard: React.FC = () => {
         all: 'Histórico Completo'
     };
 
+    // Generate Invoices Rows
+    const invoiceRows = filteredInvoices
+        .filter(inv => inv.status !== InvoiceStatus.DRAFT)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .map(inv => `
+            <tr>
+                <td>${new Date(inv.createdAt).toLocaleDateString()}</td>
+                <td>${getClientName(inv.clientId)}</td>
+                <td style="text-align: center;"><span class="badge">${inv.status}</span></td>
+                <td style="text-align: right;">$${(inv.amountPaid || 0).toFixed(2)}</td>
+                <td style="text-align: right; font-weight: bold;">$${(inv.grandTotalUsd || 0).toFixed(2)}</td>
+            </tr>
+        `).join('');
+
+    // Generate Expense Rows
+    const expenseRows = filteredExpenses
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .map(exp => `
+            <tr>
+                <td>${new Date(exp.date).toLocaleDateString()}</td>
+                <td>${exp.description}</td>
+                <td>${exp.category}</td>
+                <td style="text-align: right; font-weight: bold; color: #dc2626;">$${(exp.amount || 0).toFixed(2)}</td>
+            </tr>
+        `).join('');
+
     const html = `
       <html>
         <head>
           <title>Reporte Financiero - KASSTYLE</title>
           <style>
-             body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #333; }
+             body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #333; line-height: 1.5; }
              .header { text-align: center; margin-bottom: 40px; border-bottom: 2px solid #3e136b; padding-bottom: 20px; }
              .title { font-size: 28px; font-weight: bold; color: #3e136b; }
              .subtitle { font-size: 14px; color: #666; margin-top: 5px; }
              .period { background: #f3f4f6; padding: 10px; text-align: center; font-weight: bold; border-radius: 8px; margin-bottom: 30px; }
              .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 40px; }
              .card { border: 1px solid #ddd; padding: 20px; border-radius: 8px; text-align: center; }
-             .card-title { font-size: 12px; text-transform: uppercase; color: #666; }
+             .card-title { font-size: 11px; text-transform: uppercase; color: #666; font-weight: bold; }
              .card-value { font-size: 24px; font-weight: bold; margin-top: 5px; color: #111; }
-             .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #999; }
+             
+             h3 { border-bottom: 1px solid #3e136b; padding-bottom: 8px; margin-top: 40px; color: #3e136b; font-size: 18px; }
+             
+             table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12px; }
+             th { background: #f8fafc; text-align: left; padding: 10px; border-bottom: 2px solid #e2e8f0; color: #64748b; text-transform: uppercase; }
+             td { padding: 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+             
+             .badge { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; border: 1px solid #e2e8f0; }
+             
+             .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 20px; }
+             
+             @media print {
+                h3 { page-break-after: avoid; }
+                table { page-break-inside: auto; }
+                tr { page-break-inside: avoid; page-break-after: auto; }
+             }
           </style>
         </head>
         <body>
           <div class="header">
             <div class="title">KASSTYLE Manager</div>
-            <div class="subtitle">Reporte de Desempeño Financiero</div>
+            <div class="subtitle">Reporte Consolidado de Desempeño Financiero</div>
           </div>
 
           <div class="period">
              Periodo: ${rangeLabels[timeRange]}
              <br/>
-             <span style="font-size: 12px; font-weight: normal; color: #666">Generado el: ${new Date().toLocaleDateString()}</span>
+             <span style="font-size: 11px; font-weight: normal; color: #666">Generado el: ${new Date().toLocaleDateString()} a las ${new Date().toLocaleTimeString()}</span>
           </div>
 
           <div class="grid">
@@ -201,18 +245,46 @@ export const Dashboard: React.FC = () => {
              </div>
           </div>
 
-          <h3 style="border-bottom: 1px solid #eee; padding-bottom: 10px;">Resumen Ejecutivo</h3>
-          <p>
-            Durante el periodo <strong>${rangeLabels[timeRange]}</strong>, se generaron ingresos por ventas de <strong>$${stats.revenue.toFixed(2)}</strong>. 
-            Sin embargo, se incurrió en gastos operativos (materiales, servicios, etc.) por un total de <strong>$${stats.totalExpenses.toFixed(2)}</strong>.
-            <br/><br/>
-            Esto resulta en una <strong>Utilidad Neta Real de $${stats.netProfit.toFixed(2)}</strong>, lo que representa un margen del <strong>${stats.profitMargin.toFixed(1)}%</strong>.
-            <br/>
-            Queda pendiente por cobrar un total de <strong>$${stats.pending.toFixed(2)}</strong> de pedidos en curso.
+          <h3 style="margin-top: 20px;">Análisis de Resultados</h3>
+          <p style="font-size: 13px;">
+            Durante el periodo <strong>${rangeLabels[timeRange]}</strong>, la operación generó ingresos reales por cobranza de <strong>$${stats.revenue.toFixed(2)}</strong>. 
+            Se registraron gastos operativos por <strong>$${stats.totalExpenses.toFixed(2)}</strong>, dejando una <strong>Utilidad Neta de $${stats.netProfit.toFixed(2)}</strong>. 
+            El rendimiento sobre ingresos es del <strong>${stats.profitMargin.toFixed(1)}%</strong>. Actualmente existe una cartera pendiente por cobrar de <strong>$${stats.pending.toFixed(2)}</strong>.
           </p>
 
+          <h3>Detalle de Ingresos (Facturación)</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Cliente</th>
+                <th style="text-align: center;">Estado</th>
+                <th style="text-align: right;">Abonado</th>
+                <th style="text-align: right;">Total Factura</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${invoiceRows || '<tr><td colspan="5" style="text-align: center; color: #999;">No hay facturas registradas en este periodo.</td></tr>'}
+            </tbody>
+          </table>
+
+          <h3>Detalle de Egresos (Gastos Operativos)</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Descripción / Concepto</th>
+                <th>Categoría</th>
+                <th style="text-align: right;">Monto</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${expenseRows || '<tr><td colspan="4" style="text-align: center; color: #999;">No hay gastos registrados en este periodo.</td></tr>'}
+            </tbody>
+          </table>
+
           <div class="footer">
-             Documento generado automáticamente por KASSTYLE
+             Documento oficial generado por KASSTYLE Manager. Prohibida su alteración sin autorización.
           </div>
         </body>
         <script>window.print();</script>
