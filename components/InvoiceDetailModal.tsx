@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Invoice, Client, InvoiceStatus } from '../types';
 import { Button } from './Button';
 import { StorageService } from '../services/storage';
@@ -13,6 +13,15 @@ interface InvoiceDetailModalProps {
 export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice, client, onClose }) => {
   const [currency, setCurrency] = useState<'USD' | 'Bs'>('USD');
   const [isSwapped, setIsSwapped] = useState(false); 
+
+  // Close on Escape key
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [onClose]);
 
   // Calculate logic locally
   const subTotalProducts = (invoice.items || []).reduce((acc, item) => acc + ((item.finalPrice || 0) * (item.quantity || 0)), 0);
@@ -57,7 +66,6 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
     const itemsHtml = safeItems.map(item => {
       const weightKg = item.weightUnit === 'lb' ? (item.weight / 2.20462) : item.weight;
       
-      // Updated Formula: (Costo Orig - Impuesto - Descuento) * 0.20
       const taxableBase = (item.originalPrice || 0) - (item.taxes || 0) - (item.discounts || 0);
       const elecTax = item.isElectronics ? (taxableBase * 0.20) : 0;
       
@@ -88,8 +96,6 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
 
     const invoiceBody = `
        <div class="invoice-container">
-          
-          <!-- Header -->
           <div style="display: flex; justify-content: space-between; border-bottom: 3px solid #3e136b; padding-bottom: 20px; margin-bottom: 30px;">
             <div>
               <div style="font-size: 34px; font-weight: 900; color: #3e136b; letter-spacing: -1px; line-height: 1;">KASSTYLE</div>
@@ -106,7 +112,6 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
             </div>
           </div>
 
-          <!-- Info Cliente -->
           <div style="margin-bottom: 30px; background: #f8fafc; padding: 20px; border-radius: 8px; border-left: 4px solid #3e136b; page-break-inside: avoid;">
             <div style="font-size: 11px; color: #64748b; margin-bottom: 4px; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px;">Cliente</div>
             <div style="font-size: 18px; font-weight: bold; color: #1e293b; margin-bottom: 2px;">${client.name}</div>
@@ -114,7 +119,6 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
             <div style="font-size: 14px; color: #475569;">${client.address || ''}</div>
           </div>
 
-          <!-- Tabla -->
           <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 13px;">
             <thead>
               <tr style="background: #f1f5f9;">
@@ -130,7 +134,6 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
             </tbody>
           </table>
 
-          <!-- Totales -->
           <div style="display: flex; justify-content: flex-end; page-break-inside: avoid;">
             <div style="width: 280px;">
               <div style="display: flex; justify-content: space-between; padding: 12px 0; border-top: 2px solid #3e136b; margin-top: 10px;">
@@ -151,7 +154,6 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
             </div>
           </div>
 
-          <!-- Footer -->
           <div style="margin-top: 60px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 25px; page-break-inside: avoid;">
             <p style="font-weight: 500;">Gracias por confiar en nuestros servicios.</p>
             <p style="margin-top: 5px;">KASSTYLE - Gestión de Logística e Importación</p>
@@ -173,12 +175,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
           <style>
             * { box-sizing: border-box; }
             body { margin: 0; padding: 0; background-color: #f3f4f6; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
-            
-            .invoice-container {
-                background: white;
-                margin: 0 auto;
-            }
-
+            .invoice-container { background: white; margin: 0 auto; }
             @media screen {
                body { padding: 40px 0; display: flex; justify-content: center; }
                .invoice-container { 
@@ -188,25 +185,10 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
                   border-radius: 4px;
                }
             }
-
             @media print {
               @page { size: A4; margin: 12mm; }
-              
-              body { 
-                 background-color: white; 
-                 -webkit-print-color-adjust: exact; 
-                 print-color-adjust: exact;
-              }
-              
-              .invoice-container {
-                 width: 100% !important;
-                 max-width: none !important;
-                 padding: 0 !important;
-                 margin: 0 !important;
-                 box-shadow: none !important;
-                 border: none !important;
-              }
-
+              body { background-color: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              .invoice-container { width: 100% !important; max-width: none !important; padding: 0 !important; margin: 0 !important; box-shadow: none !important; border: none !important; }
               table { width: 100% !important; }
             }
           </style>
@@ -215,9 +197,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
           ${invoiceBody}
           <script>
              window.onload = function() {
-                setTimeout(() => {
-                    window.print();
-                }, 500);
+                setTimeout(() => { window.print(); }, 500);
              }
           </script>
         </body>
@@ -229,15 +209,21 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh]">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white rounded-xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b border-slate-100">
           <div>
             <h2 className="text-2xl font-bold text-slate-800">Factura #{invoice.id.slice(0, 6)}...</h2>
             <p className="text-sm text-slate-500">{new Date(invoice.createdAt).toLocaleDateString()} &bull; {client.name}</p>
           </div>
-          <button onClose={onClose} className="text-slate-400 hover:text-slate-700 transition-colors">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 transition-colors p-1 rounded-md hover:bg-slate-100">
             <X size={24} />
           </button>
         </div>
@@ -303,7 +289,6 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
           {/* Totals Section */}
           <div className="flex justify-end">
              <div className="w-full sm:w-1/2 bg-white rounded-lg shadow-sm border border-slate-200 p-4 space-y-3">
-                
                 <div className="flex justify-between text-sm text-slate-500">
                     <span>Subtotal Productos</span>
                     <span>{formatBody(subTotalProducts)}</span>
@@ -357,7 +342,6 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
                 )}
              </div>
           </div>
-
         </div>
       </div>
     </div>
